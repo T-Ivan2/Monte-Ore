@@ -47,6 +47,12 @@ npx web-push generate-vapid-keys
 
 3. Avvia un nuovo deploy. La funzione pianificata gira solo sul deploy di produzione.
 
+Il sito invia header di sicurezza, tra cui una Content-Security-Policy, definiti in `netlify.toml`. La policy permette le connessioni solo verso `*.supabase.co`: se usi un dominio personalizzato per Supabase, aggiungilo in `connect-src`.
+
+### Aggiornare il database
+
+Dopo ogni aggiornamento del codice riesegui `supabase/schema.sql` nello SQL Editor: aggiunge le novità senza toccare i dati.
+
 ### 4. Attivare le notifiche
 
 - **iPhone:** apri il sito in Safari, poi Condividi > Aggiungi alla schermata Home. Apri l'app dall'icona, accedi, tocca la campanella e **Attiva su questo dispositivo**. Serve iOS 16.4 o successivo.
@@ -57,6 +63,7 @@ Usa **Prova notifica** per controllare che l'invio funzioni, poi verifica che ar
 ## Regole da conoscere
 
 - I promemoria partono dal lunedì al venerdì, esclusi i festivi nazionali, e solo se nella giornata mancano ore.
+- Se l'invio di un promemoria fallisce per un errore temporaneo, viene ritentato ogni minuto per i 5 minuti successivi all'orario.
 - Il santo patrono locale non è un festivo automatico: registralo come assenza **Altro**.
 - Il codice ServiceNow è obbligatorio sui progetti, in qualsiasi formato. Una task si crea alla prima registrazione, resta selezionabile finché è aperta e, una volta terminata, resta nell'archivio con le sue ore. Registrare ore sul suo codice la riapre.
 - **Esporta in Excel**, nella tab Mese, crea un file con il dettaglio delle voci e il riepilogo per progetto e task.
@@ -68,3 +75,5 @@ npm test          # regole, promemoria, vincoli e sicurezza del database
 npm i --no-save playwright && npx playwright install chromium
 npm run test:e2e  # flussi completi nel browser
 ```
+
+Gli stessi test girano su GitHub Actions a ogni push e pull request (`.github/workflows/ci.yml`).

@@ -89,10 +89,11 @@ export function romeNow(date = new Date()) {
   return { day: `${p.year}-${p.month}-${p.day}`, time: `${p.hour}:${p.minute}` };
 }
 const minutes = t => { const [h, m] = t.split(':').map(Number); return h * 60 + m; };
+export const isTime = t => /^([01]\d|2[0-3]):[0-5]\d$/.test(t);
 // Un orario è dovuto dal suo minuto esatto per i minuti successivi, così un'esecuzione in ritardo non lo perde.
 export function dueTimes(times, now, windowMin = 5) {
   const n = minutes(now);
-  return times.filter(t => { const diff = n - minutes(t); return diff >= 0 && diff < windowMin; });
+  return times.filter(isTime).filter(t => { const diff = n - minutes(t); return diff >= 0 && diff < windowMin; });
 }
 export function reminderBody(missing) {
   return `Oggi mancano ${fmt(missing)} h da inserire.`;

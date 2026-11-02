@@ -1,3 +1,12 @@
+// Font serviti dal sito: niente richieste a Google e disponibili anche offline.
+import '@fontsource/familjen-grotesk/latin-500.css';
+import '@fontsource/familjen-grotesk/latin-700.css';
+import '@fontsource/ibm-plex-sans/latin-400.css';
+import '@fontsource/ibm-plex-sans/latin-500.css';
+import '@fontsource/ibm-plex-sans/latin-600.css';
+import '@fontsource/ibm-plex-mono/latin-400.css';
+import '@fontsource/ibm-plex-mono/latin-500.css';
+import '@fontsource/ibm-plex-mono/latin-600.css';
 import './style.css';
 import {
   TARGET, PROJECTS, ABSENCES, WHO, DOW, MONTHS, key, parse, addDays, monday, weekDays, fmt, isAbsence,

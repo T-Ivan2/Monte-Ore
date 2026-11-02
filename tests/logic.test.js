@@ -59,12 +59,14 @@ describe('promemoria', () => {
     expect(dueTimes(['13:00'], '13:04')).toEqual(['13:00']);
     expect(dueTimes(['13:00'], '13:05')).toEqual([]);
     expect(dueTimes(['13:00'], '12:59')).toEqual([]);
+    expect(dueTimes(['9', '13:0', '25:00', '13:00'], '13:00')).toEqual(['13:00']);
   });
   const setup = (hours) => {
     const seen = new Set(), sent = [];
-    return { sent, deps: {
+    return { sent, seen, deps: {
       listSettings: async () => [{ user_id: 'u', times: ['13:00', '17:30'] }],
       claim: async (u, d, t) => { const k = u + d + t; if (seen.has(k)) return false; seen.add(k); return true; },
+      release: async (u, d, t) => { seen.delete(u + d + t); },
       hoursFor: async () => hours,
       notify: async (u, p) => { sent.push(p.body); }
     } };
@@ -82,6 +84,24 @@ describe('promemoria', () => {
       await runReminders(deps, date);
       expect(sent).toEqual([]);
     }
+  });
+  it('riprova al minuto dopo se l\'invio fallisce', async () => {
+    const { sent, seen, deps } = setup(3);
+    let fails = 1;
+    const notify = deps.notify;
+    deps.notify = async (u, p) => { if (fails-- > 0) throw new Error('rete'); return notify(u, p); };
+    expect(await runReminders(deps, at13)).toEqual({ sent: 0, failed: 1 });
+    expect(seen.size).toBe(0);
+    expect(await runReminders(deps, new Date('2026-11-04T12:01:00Z'))).toEqual({ sent: 1, failed: 0 });
+    expect(sent).toEqual(['Oggi mancano 5 h da inserire.']);
+  });
+  it('un errore su un utente non blocca gli altri', async () => {
+    const { sent, deps } = setup(3);
+    deps.listSettings = async () => [{ user_id: 'a', times: ['13:00'] }, { user_id: 'b', times: ['13:00'] }];
+    const hoursFor = deps.hoursFor;
+    deps.hoursFor = async u => { if (u === 'a') throw new Error('db'); return hoursFor(u); };
+    expect(await runReminders(deps, at13)).toEqual({ sent: 1, failed: 1 });
+    expect(sent).toHaveLength(1);
   });
   it('formatta le mezz\'ore', () => expect(fmt(2.5)).toBe('2,5'));
 });
@@ -142,6 +162,16 @@ describe('schema database', () => {
     await as(db, U1);
     expect((await db.query('select * from entries')).rows).toHaveLength(1);
     expect((await db.query('select * from tasks')).rows).toHaveLength(1);
+  });
+  it('accetta solo orari validi per i promemoria', async () => {
+    const db = await dbReady();
+    await as(db, U1);
+    const set = t => db.exec(`insert into reminder_settings (times) values ('${t}') on conflict (user_id) do update set times = excluded.times`);
+    await expect(set('{13:00,17:30}')).resolves.toBeTruthy();
+    await expect(set('{}')).resolves.toBeTruthy();
+    for (const bad of ['{9:00}', '{13:00:00}', '{25:00}', '{13:60}', '{"13:00,14:00"}', '{NULL}', `{${Array(13).fill('10:00').join(',')}}`]) {
+      await expect(set(bad)).rejects.toThrow();
+    }
   });
   it('tiene separati i dati di ogni utente', async () => {
     const db = await dbReady();

@@ -59,6 +59,15 @@ create table if not exists public.reminder_settings (
   times text[] not null default '{13:00,17:30}'
 );
 
+-- Al massimo 12 orari, ognuno nel formato HH:MM. Nessun orario significa notifiche spente.
+create or replace function public.valid_reminder_times(t text[]) returns boolean
+language sql immutable as $$
+  select cardinality(t) <= 12
+     and coalesce((select bool_and(coalesce(x ~ '^([01][0-9]|2[0-3]):[0-5][0-9]$', false)) from unnest(t) x), true)
+$$;
+alter table public.reminder_settings drop constraint if exists reminder_times_format;
+alter table public.reminder_settings add constraint reminder_times_format check (public.valid_reminder_times(times));
+
 create table if not exists public.push_subscriptions (
   endpoint text primary key,
   user_id uuid not null default auth.uid() references auth.users (id) on delete cascade,

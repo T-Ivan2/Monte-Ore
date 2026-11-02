@@ -16,6 +16,10 @@ export default async () => {
       if (error) throw error;
       return data.length > 0;
     },
+    async release(user_id, day, time) {
+      const { error } = await db.from('reminder_log').delete().eq('user_id', user_id).eq('day', day).eq('time', time);
+      if (error) throw error;
+    },
     async hoursFor(user_id, day) {
       const { data, error } = await db.from('entries').select('hours').eq('user_id', user_id).eq('day', day);
       if (error) throw error;

@@ -1,0 +1,36 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Test di regole, promemoria e database
+        run: npm test
+      - name: Build
+        run: npm run build
+      - name: Installa Chromium
+        run: |
+          npm i --no-save playwright
+          npx playwright install --with-deps chromium
+      - name: Test e2e
+        run: npm run test:e2e
+        env:
+          SHOTS: ${{ runner.temp }}
+      - name: Schermate dei test e2e
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-screenshots
+          path: ${{ runner.temp }}/*.png
+          if-no-files-found: ignore

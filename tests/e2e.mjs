@@ -2,6 +2,7 @@
 import { createRequire } from 'node:module';
 import { spawn, execSync } from 'node:child_process';
 import assert from 'node:assert';
+import { readFileSync } from 'node:fs';
 const require = createRequire(process.env.PLAYWRIGHT_FROM || import.meta.url);
 const { chromium } = require('playwright');
 const OUT = process.env.SHOTS || '.';
@@ -9,15 +10,28 @@ const NOW = new Date('2026-11-04T10:00:00+01:00');
 
 function serve(dir, port) {
   const p = spawn('npx', ['vite', 'preview', '--outDir', dir, '--port', String(port), '--strictPort'], { stdio: 'ignore', detached: true });
-  return new Promise(r => setTimeout(() => r(p), 1500));
+  // Aspetta che il server risponda invece di un tempo fisso, che sulle macchine lente non basta.
+  return (async () => {
+    for (let i = 0; i < 100; i++) {
+      try { await fetch(`http://localhost:${port}/`); return p; } catch { await new Promise(r => setTimeout(r, 200)); }
+    }
+    throw new Error(`il server sulla porta ${port} non risponde`);
+  })();
 }
 const b = await chromium.launch();
 const errs = [];
+// Applica la stessa Content-Security-Policy di Netlify, così una violazione fa fallire il test.
+const CSP = readFileSync('netlify.toml', 'utf8').match(/Content-Security-Policy = "([^"]+)"/)[1];
 async function page(url, opts) {
   const c = await b.newContext({ serviceWorkers: 'block', ...opts });
+  await c.route('http://localhost:*/**', async route => {
+    const res = await route.fetch();
+    route.fulfill({ response: res, headers: { ...res.headers(), 'content-security-policy': CSP } });
+  });
   const p = await c.newPage();
   await p.clock.setFixedTime(NOW);
   p.on('pageerror', e => errs.push(e.message));
+  p.on('console', m => { if (/Content Security Policy/i.test(m.text())) errs.push(m.text()); });
   return [p, c, url];
 }
 
