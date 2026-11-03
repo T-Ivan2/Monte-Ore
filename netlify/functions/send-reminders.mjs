@@ -36,5 +36,5 @@ export default async () => {
   console.log('reminders', result);
 };
 
-// Ogni minuto, dal lunedì al venerdì (orario UTC; l'ora italiana è calcolata nel codice).
-export const config = { schedule: '* * * * 1-5' };
+// Ogni 5 minuti, dal lunedì al venerdì (orario UTC; l'ora italiana è calcolata nel codice).
+export const config = { schedule: '*/5 * * * 1-5' };

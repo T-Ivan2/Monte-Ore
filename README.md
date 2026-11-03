@@ -114,7 +114,7 @@ Ogni pulsante porta un token firmato con una chiave ricavata da `VAPID_PRIVATE_K
 - **Ore previste**: l'icona con l'orologio, in alto, imposta le ore da registrare da lunedì a venerdì (predefinite 8). Metti 0 nei giorni in cui non lavori.
 - Sabato, domenica e festivi non prevedono ore e non risultano mai incompleti, ma puoi registrarci ore con **Aggiungi ore**: contano nel totale del mese e nell'export.
 - I promemoria partono dal lunedì al venerdì, esclusi i festivi nazionali e i giorni a 0 ore, e solo se nella giornata mancano ore rispetto a quelle previste.
-- Se l'invio di un promemoria fallisce per un errore temporaneo, viene ritentato ogni minuto per i 5 minuti successivi all'orario.
+- La funzione dei promemoria gira ogni 5 minuti: un promemoria arriva entro qualche minuto dall'orario scelto. Se l'invio fallisce per un errore temporaneo viene ritentato al giro successivo, fino a 10 minuti dopo l'orario.
 - Il santo patrono locale non è un festivo automatico: registralo come assenza **Altro**.
 - Il codice ServiceNow è obbligatorio sui progetti, in qualsiasi formato. Una task si crea alla prima registrazione, resta selezionabile finché è aperta e, una volta terminata, resta nell'archivio con le sue ore. Registrare ore sul suo codice la riapre.
 - Su un giorno vuoto, **Copia da…** ripete le voci dell'ultimo giorno compilato nella settimana precedente. Le voci su task terminate non vengono copiate.
