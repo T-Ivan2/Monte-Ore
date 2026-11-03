@@ -1,4 +1,6 @@
-import { WHO, TARGET, isAbsence, parse } from './logic.js';
+import { TARGET, DEFAULT_PROJECTS, ABSENCES, isAbsence, parse } from './logic.js';
+
+const DEFAULT_NAMES = Object.fromEntries([...DEFAULT_PROJECTS, ...ABSENCES].map(w => [w.id, w.name]));
 
 const head = v => ({ value: v, fontWeight: 'bold', backgroundColor: '#E6EBEF' });
 // L'ora UTC tiene ferma la data in Excel, qualunque sia il fuso del telefono.
@@ -6,9 +8,10 @@ const excelDate = k => { const [y, m, d] = k.split('-').map(Number); return new 
 const WEEKDAYS = ['Domenica', 'Lunedì', 'Martedì', 'Mercoledì', 'Giovedì', 'Venerdì', 'Sabato'];
 
 // Prepara i fogli del file: dettaglio delle voci e riepilogo del mese.
-// dayLen sono le ore di una giornata, usate per convertire le ore in giornate.
-export function buildSheets(entries, target, dayLen = TARGET) {
-  const sorted = [...entries].sort((a, b) => a.day.localeCompare(b.day) || WHO[a.who].name.localeCompare(WHO[b.who].name, 'it'));
+// dayLen sono le ore di una giornata, usate per convertire le ore in giornate. names associa ogni progetto o assenza al suo nome.
+export function buildSheets(entries, target, dayLen = TARGET, names = DEFAULT_NAMES) {
+  const nameOf = id => names[id] ?? id;
+  const sorted = [...entries].sort((a, b) => a.day.localeCompare(b.day) || nameOf(a.who).localeCompare(nameOf(b.who), 'it'));
   const total = sorted.reduce((s, e) => s + e.hours, 0);
   const detail = [
     ['Data', 'Giorno', 'Tipo', 'Progetto o assenza', 'Codice ServiceNow', 'Ore', 'Descrizione'].map(head),
@@ -16,7 +19,7 @@ export function buildSheets(entries, target, dayLen = TARGET) {
       { value: excelDate(e.day), type: Date, format: 'dd/mm/yyyy' },
       { value: WEEKDAYS[parse(e.day).getDay()], type: String },
       { value: isAbsence(e.who) ? 'Assenza' : 'Progetto', type: String },
-      { value: WHO[e.who].name, type: String },
+      { value: nameOf(e.who), type: String },
       { value: e.code || '', type: String },
       { value: e.hours, type: Number, format: '0.0' },
       { value: e.description || '', type: String, wrap: true }
@@ -24,12 +27,13 @@ export function buildSheets(entries, target, dayLen = TARGET) {
     [{ value: 'Totale', fontWeight: 'bold' }, null, null, null, null, { value: total, type: Number, format: '0.0', fontWeight: 'bold' }, null]
   ];
   const sum = (arr) => arr.reduce((s, e) => s + e.hours, 0);
-  const whoRows = Object.keys(WHO).map(id => ({ id, h: sum(sorted.filter(e => e.who === id)) })).filter(r => r.h > 0);
+  const ids = [...new Set([...Object.keys(names), ...sorted.map(e => e.who)])];
+  const whoRows = ids.map(id => ({ id, h: sum(sorted.filter(e => e.who === id)) })).filter(r => r.h > 0);
   const taskKeys = [...new Set(sorted.filter(e => e.code).map(e => `${e.who}|${e.code}`))];
   const summary = [
     [head('Monte ore'), head('Ore'), head('Giornate')],
     ...whoRows.map(r => [
-      { value: WHO[r.id].name, type: String },
+      { value: nameOf(r.id), type: String },
       { value: r.h, type: Number, format: '0.0' },
       { value: r.h / dayLen, type: Number, format: '0.00' }
     ]),
@@ -42,7 +46,7 @@ export function buildSheets(entries, target, dayLen = TARGET) {
       return [
         { value: code, type: String },
         { value: sum(sorted.filter(e => e.who === who && e.code === code)), type: Number, format: '0.0' },
-        { value: WHO[who].name, type: String }
+        { value: nameOf(who), type: String }
       ];
     })
   ];
@@ -52,9 +56,9 @@ export function buildSheets(entries, target, dayLen = TARGET) {
   ];
 }
 
-export async function exportMonth(entries, month, target, dayLen) {
+export async function exportMonth(entries, month, target, dayLen, names) {
   const { default: writeXlsxFile } = await import('write-excel-file/browser');
-  const blob = await writeXlsxFile(buildSheets(entries, target, dayLen)).toBlob();
+  const blob = await writeXlsxFile(buildSheets(entries, target, dayLen, names)).toBlob();
   const name = `monte-ore-${month}.xlsx`;
   const file = new File([blob], name, { type: blob.type || 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
   // Sul telefono apre il menu di condivisione: Salva su File, Mail, WhatsApp e così via.

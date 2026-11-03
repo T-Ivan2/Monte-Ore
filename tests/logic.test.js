@@ -1,7 +1,7 @@
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { describe, it, expect } from 'vitest';
 import { PGlite } from '@electric-sql/pglite';
-import { holidayName, monthDays, monday, validateEntry, romeNow, dueTimes, fmt, targetFor, validDayHours, dayLength } from '../src/logic.js';
+import { holidayName, monthDays, monday, validateEntry, romeNow, dueTimes, fmt, targetFor, validDayHours, dayLength, slugify, validateProject, colorVar } from '../src/logic.js';
 import { buildSheets } from '../src/export.js';
 import { runReminders } from '../netlify/lib/reminders.mjs';
 
@@ -36,6 +36,31 @@ describe('calendario', () => {
     expect(validDayHours([8, 8, 8, 8, 25])).toBe(false);
     expect(dayLength([6, 6, 6, 6, 0])).toBe(6);
     expect(dayLength([0, 0, 0, 0, 0])).toBe(8);
+  });
+});
+
+describe('progetti', () => {
+  const list = [{ id: 'shueco', name: 'Shüco' }, { id: 'inpeco', name: 'Inpeco' }];
+  it('ricava un identificativo stabile dal nome', () => {
+    expect(slugify('Poltrona Frau')).toBe('poltrona-frau');
+    expect(slugify('Shüco', ['shuco'])).toBe('shuco-2');
+    expect(slugify('Ferie')).toBe('ferie-2');
+    expect(slugify('!!!')).toBe('progetto');
+    expect(slugify('x'.repeat(60))).toHaveLength(30);
+  });
+  it('controlla nome e colore', () => {
+    expect(validateProject({ name: '  Acme   srl ', color: 'c4' }, list)).toEqual({ errors: {}, value: { name: 'Acme srl', color: 'c4' } });
+    expect(validateProject({ name: ' ', color: 'c4' }, list).errors.name).toMatch(/Inserisci/);
+    expect(validateProject({ name: 'SHÜCO', color: 'c4' }, list).errors.name).toMatch(/Esiste già/);
+    expect(validateProject({ name: 'Shüco', color: 'c4' }, list, 'shueco').errors).toEqual({});
+    expect(validateProject({ name: 'Permesso', color: 'c4' }, list).errors.name).toMatch(/assenza/);
+    expect(validateProject({ name: 'A'.repeat(41), color: 'c4' }, list).errors.name).toMatch(/40/);
+    expect(validateProject({ name: 'Acme', color: 'rosso' }, list).errors.color).toBeTruthy();
+    expect(colorVar('c3')).toBe('var(--c-3)');
+    expect(colorVar('altro')).toBe('var(--c-off)');
+  });
+  it('chiede un progetto per le ore di progetto', () => {
+    expect(validateEntry({ kind: 'project', who: null, code: 'T1', hours: '1', desc: '' }).errors.who).toBeTruthy();
   });
 });
 
@@ -138,6 +163,7 @@ describe('promemoria', () => {
 });
 
 describe('schema database', () => {
+  const MIGRATIONS = readdirSync('supabase/migrations').filter(f => f.endsWith('.sql')).sort();
   const U1 = '00000000-0000-0000-0000-000000000001', U2 = '00000000-0000-0000-0000-000000000002';
   async function dbReady() {
     const db = new PGlite();
@@ -148,7 +174,7 @@ describe('schema database', () => {
       grant usage on schema auth to authenticated;
       insert into auth.users values ('${U1}'), ('${U2}');
     `);
-    await db.exec(readFileSync('supabase/schema.sql', 'utf8'));
+    for (const f of MIGRATIONS) await db.exec(readFileSync(`supabase/migrations/${f}`, 'utf8'));
     return db;
   }
   const as = async (db, uid) => { await db.exec(`reset role; set app.uid = '${uid}'; set role authenticated;`); };
@@ -184,15 +210,56 @@ describe('schema database', () => {
     expect((await db.query('select * from task_hours')).rows).toHaveLength(0);
     expect((await db.query('select * from tasks')).rows).toHaveLength(0);
   });
-  it('si può rieseguire lo schema senza perdere dati', async () => {
+  it('registra le migrazioni e non riapplica quelle già eseguite', async () => {
     const db = await dbReady();
     await as(db, U1);
     await db.exec(ok);
     await db.exec('reset role;');
-    await db.exec(readFileSync('supabase/schema.sql', 'utf8'));
+    expect((await db.query('select version from schema_migrations order by version')).rows.map(r => r.version))
+      .toEqual(MIGRATIONS.map(f => f.slice(0, 4)));
+    await db.exec(readFileSync('supabase/migrations/0001_init.sql', 'utf8'));
+    await expect(db.exec(readFileSync('supabase/migrations/0002_projects.sql', 'utf8'))).rejects.toThrow(/già stata applicata/);
     await as(db, U1);
     expect((await db.query('select * from entries')).rows).toHaveLength(1);
     expect((await db.query('select * from tasks')).rows).toHaveLength(1);
+    expect((await db.query('select id from projects order by created_at')).rows.map(r => r.id)).toEqual(['shueco', 'inpeco', 'frau']);
+  });
+  it('porta i dati esistenti sui progetti in tabella', async () => {
+    const db = new PGlite();
+    await db.exec(`
+      create schema auth; create table auth.users (id uuid primary key);
+      create role authenticated; create role service_role;
+      create function auth.uid() returns uuid language sql stable as $$ select nullif(current_setting('app.uid', true), '')::uuid $$;
+      grant usage on schema auth to authenticated;
+      insert into auth.users values ('${U1}');
+    `);
+    await db.exec(readFileSync('supabase/migrations/0001_init.sql', 'utf8'));
+    await db.exec(`insert into entries (user_id, day, who, hours, code) values ('${U1}', '2026-11-04', 'frau', 3, 'T1')`);
+    await db.exec(`delete from tasks`);
+    await db.exec(readFileSync('supabase/migrations/0002_projects.sql', 'utf8'));
+    await as(db, U1);
+    expect((await db.query('select who, code from tasks')).rows).toEqual([{ who: 'frau', code: 'T1' }]);
+    expect(Number((await db.query('select hours from task_hours')).rows[0].hours)).toBe(3);
+  });
+  it('lega voci, task e progetti', async () => {
+    const db = await dbReady();
+    await as(db, U1);
+    await expect(db.exec(`insert into entries (day, who, hours, code) values ('2026-11-04', 'sconosciuto', 1, 'T1')`)).rejects.toThrow();
+    await expect(db.exec(`insert into entries (day, who, hours) values ('2026-11-04', 'sconosciuto', 1)`)).rejects.toThrow();
+    await db.exec(`insert into projects (id, name, color) values ('acme', 'Acme', 'c4')`);
+    await expect(db.exec(`insert into projects (id, name, color) values ('acme-2', 'ACME', 'c5')`)).rejects.toThrow();
+    await expect(db.exec(`insert into projects (id, name, color) values ('ferie', 'Ferie', 'c5')`)).rejects.toThrow();
+    await expect(db.exec(`insert into projects (id, name, color) values ('x', 'X', 'rosso')`)).rejects.toThrow();
+    await db.exec(`insert into entries (day, who, hours, code) values ('2026-11-04', 'acme', 2, 'A1')`);
+    expect((await db.query(`select * from task_hours where who = 'acme'`)).rows).toHaveLength(1);
+    await expect(db.exec(`delete from tasks where who = 'acme'`)).rejects.toThrow();
+    await expect(db.exec(`delete from projects where id = 'acme'`)).rejects.toThrow();
+    await db.exec(`delete from entries where who = 'acme'`);
+    await db.exec(`delete from tasks where who = 'acme'`);
+    await db.exec(`delete from projects where id = 'acme'`);
+    await as(db, U2);
+    expect((await db.query('select id from projects')).rows).toHaveLength(3);
+    await expect(db.exec(`insert into projects (user_id, id, name, color) values ('${U1}', 'spia', 'Spia', 'c1')`)).rejects.toThrow();
   });
   it('accetta solo orari validi per i promemoria', async () => {
     const db = await dbReady();
@@ -236,5 +303,10 @@ describe('export', () => {
     const row = summary.data.find(r => r[0]?.value === 'Inpeco');
     expect(row[2].value).toBe(1);
     expect(summary.data.find(r => r[0]?.value === 'Ore previste')[2].value).toBe(20);
+  });
+  it('usa i nomi dei progetti dell\'utente', () => {
+    const [detail, summary] = buildSheets([{ day: '2026-11-04', who: 'acme', hours: 2, code: 'A1', description: '' }], 8, 8, { acme: 'Acme srl' });
+    expect(detail.data[1][3].value).toBe('Acme srl');
+    expect(summary.data.some(r => r[0]?.value === 'Acme srl')).toBe(true);
   });
 });

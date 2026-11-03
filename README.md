@@ -1,6 +1,6 @@
 # Monte Ore
 
-App da telefono per registrare ogni giorno le ore su Shüco, Inpeco e Poltrona Frau, per task ServiceNow, oppure le assenze. Invia promemoria agli orari scelti ed esporta il mese in Excel.
+App da telefono per registrare ogni giorno le ore sui tuoi progetti, per task ServiceNow, oppure le assenze. Invia promemoria agli orari scelti ed esporta il mese in Excel.
 
 - **App:** PWA con Vite, ospitata su Netlify
 - **Dati e login:** Supabase
@@ -20,8 +20,8 @@ Senza variabili Supabase l'app gira in modalità locale: i dati restano nel brow
 ### 1. Supabase
 
 1. Crea un progetto.
-2. Apri **SQL Editor** ed esegui `supabase/schema.sql`.
-3. In **Authentication > Users** crea il tuo utente con email e password. Conferma l'email se richiesto.
+2. In **Authentication > Users** crea il tuo utente con email e password. Conferma l'email se richiesto.
+3. Apri **SQL Editor** ed esegui, uno alla volta e in ordine, i file in `supabase/migrations/`. Il tuo utente riceve i progetti di partenza, che poi puoi cambiare dall'app.
 4. In **Authentication > Sign In / Providers** disattiva **Allow new users to sign up**, così solo tu puoi accedere.
 5. Copia URL del progetto, chiave `anon` e chiave `service_role` da **Project Settings > API**.
 
@@ -51,7 +51,13 @@ Il sito invia header di sicurezza, tra cui una Content-Security-Policy, definiti
 
 ### Aggiornare il database
 
-Dopo ogni aggiornamento del codice riesegui `supabase/schema.sql` nello SQL Editor: aggiunge le novità senza toccare i dati.
+Le modifiche al database sono file numerati in `supabase/migrations/`. Quando ne arriva uno nuovo, eseguilo una sola volta nello SQL Editor, prima di pubblicare il codice che lo usa. Per vedere quali hai già applicato:
+
+```sql
+select * from schema_migrations order by version;
+```
+
+Se riesegui per errore una migrazione già applicata si ferma con un messaggio e non cambia nulla. Solo la `0001` si può rieseguire.
 
 ### 4. Attivare le notifiche
 
@@ -62,6 +68,7 @@ Usa **Prova notifica** per controllare che l'invio funzioni, poi verifica che ar
 
 ## Regole da conoscere
 
+- **Progetti**: si gestiscono nella scheda Task: aggiungi, rinomina, cambia colore, archivia o elimina. Un progetto archiviato non si propone più quando registri le ore ma resta nei totali, nell'export e nelle task. Si può eliminare solo un progetto senza task.
 - **Ore previste**: l'icona con l'orologio, in alto, imposta le ore da registrare da lunedì a venerdì (predefinite 8). Metti 0 nei giorni in cui non lavori.
 - Sabato, domenica e festivi non prevedono ore e non risultano mai incompleti, ma puoi registrarci ore con **Aggiungi ore**: contano nel totale del mese e nell'export.
 - I promemoria partono dal lunedì al venerdì, esclusi i festivi nazionali e i giorni a 0 ore, e solo se nella giornata mancano ore rispetto a quelle previste.
@@ -72,6 +79,21 @@ Usa **Prova notifica** per controllare che l'invio funzioni, poi verifica che ar
 - Quando pubblichi una nuova versione, l'app aperta mostra **Nuova versione disponibile**: toccalo per ricaricare.
 - Nel weekend l'app si apre sul venerdì se è incompleto, altrimenti sul lunedì successivo.
 - **Esporta in Excel**, nella tab Mese, crea un file con il dettaglio delle voci e il riepilogo per progetto e task.
+
+## Struttura del codice
+
+| File | Contenuto |
+| --- | --- |
+| `src/logic.js` | Regole pure condivise con il server: calendario, festivi, validazioni |
+| `src/store.js` | Accesso ai dati: Supabase oppure il browser in modalità locale |
+| `src/state.js` | Stato dell'app e calcoli che ne derivano |
+| `src/render.js`, `src/ui.js` | Struttura della pagina, messaggi ed elementi comuni |
+| `src/views/` | Una vista per file: giorno, task e progetti, mese, pannelli in alto |
+| `src/main.js` | Avvio e collegamento degli eventi alle azioni delle viste |
+| `netlify/` | Funzioni server: promemoria pianificati e notifica di prova |
+| `supabase/migrations/` | Schema del database, una migrazione per file |
+
+Ogni vista esporta `actions`: il nome dell'azione corrisponde all'attributo `data-act` dei pulsanti.
 
 ## Test
 
