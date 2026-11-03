@@ -24,6 +24,7 @@ Senza variabili Supabase l'app gira in modalità locale: i dati restano nel brow
 3. Apri **SQL Editor** ed esegui, uno alla volta e in ordine, i file in `supabase/migrations/`. Il tuo utente riceve i progetti di partenza, che poi puoi cambiare dall'app.
 4. In **Authentication > Sign In / Providers** disattiva **Allow new users to sign up**, così solo tu puoi accedere.
 5. Copia URL del progetto, chiave `anon` e chiave `service_role` da **Project Settings > API**.
+6. In **Authentication > URL Configuration** imposta **Site URL** con l'indirizzo del sito Netlify (per esempio `https://monte-ore.netlify.app`) e aggiungilo anche in **Redirect URLs**. Serve al link di **Password dimenticata?**: senza, la mail porta alla pagina sbagliata. Il servizio mail incluso in Supabase invia poche mail all'ora, sufficienti per un uso personale.
 
 ### 2. Chiavi delle notifiche
 

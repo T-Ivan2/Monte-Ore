@@ -10,11 +10,11 @@ import '@fontsource/ibm-plex-mono/latin-500.css';
 import '@fontsource/ibm-plex-mono/latin-600.css';
 import './style.css';
 import { isAbsence, isWeekend, monday, monthDays } from './logic.js';
-import { store } from './store.js';
+import { store, authLink, isNetworkError } from './store.js';
 import { pushStatus, syncPush } from './push.js';
 import { S, today, freshDraft, startDay, around, pickDay, ensure, refreshTasks, refreshProjects } from './state.js';
 import { loadFail, toast } from './ui.js';
-import { render, renderShell, renderLogin, renderPanels, renderSync } from './render.js';
+import { render, renderShell, renderLogin, renderReset, renderNewPassword, renderPanels, renderSync } from './render.js';
 import { onSync, flushNow, pendingCount } from './sync.js';
 import { checkUpdate, actions as updateActions } from './update.js';
 import * as day from './views/day.js';
@@ -37,6 +37,8 @@ const actions = {
     } catch { loadFail(); }
     render();
   },
+  forgot: () => { renderReset(); document.getElementById('reset-email')?.focus(); },
+  backtologin: () => renderLogin(),
   logout: async () => {
     const n = pendingCount();
     if (n && !confirm(`Hai ${n === 1 ? '1 modifica' : n + ' modifiche'} non ancora inviate: uscendo le perdi. Uscire comunque?`)) return;
@@ -54,6 +56,27 @@ const submits = {
     if (!email || !password) { renderLogin('Inserisci email e password.'); return; }
     try { await store.signIn(email, password); await startApp(); }
     catch { renderLogin('Email o password non corrette, oppure connessione assente.'); }
+  },
+  'reset-form': async () => {
+    const email = document.getElementById('reset-email').value.trim();
+    if (!/^\S+@\S+\.\S+$/.test(email)) { renderReset({ message: 'Inserisci il tuo indirizzo email.' }); return; }
+    try { await store.resetPassword(email); renderReset({ sent: true }); }
+    catch (err) {
+      // Supabase limita le mail inviate: dopo troppe richieste risponde 429.
+      renderReset({ message: isNetworkError(err) ? 'Connessione assente: riprova.' : err?.status === 429 ? 'Troppe richieste: aspetta qualche minuto e riprova.' : 'Non sono riuscito a inviare la mail. Riprova.' });
+    }
+  },
+  'password-form': async () => {
+    const pw = document.getElementById('new-password').value, pw2 = document.getElementById('new-password-2').value;
+    if (pw.length < 8) { renderNewPassword('La password deve avere almeno 8 caratteri.'); return; }
+    if (pw !== pw2) { renderNewPassword('Le due password non coincidono.'); return; }
+    try {
+      await store.updatePassword(pw);
+      await startApp();
+      toast('Password aggiornata.');
+    } catch (err) {
+      renderNewPassword(isNetworkError(err) ? 'Connessione assente: riprova.' : err?.code === 'weak_password' ? 'Password troppo semplice: scegline una più lunga o più varia.' : 'Non sono riuscito a salvare la password. Riprova, oppure richiedi un nuovo link.');
+    }
   }
 };
 
@@ -146,5 +169,8 @@ if ('serviceWorker' in navigator && import.meta.env.PROD) navigator.serviceWorke
 (async () => {
   let session = null;
   try { session = await store.session(); } catch { /* mostra il login */ }
-  if (session) await startApp(); else renderLogin();
+  // Arrivati dal link della mail di recupero: prima la nuova password, poi l'app.
+  if (authLink.recovery && session && !session.offline) renderNewPassword();
+  else if (session) await startApp();
+  else renderLogin(authLink.error ? 'Il link non è più valido: richiedine uno nuovo con "Password dimenticata?".' : '');
 })();

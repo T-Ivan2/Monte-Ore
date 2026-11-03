@@ -5,6 +5,17 @@ import { DEFAULT_DAY_HOURS, DEFAULT_PROJECTS, validDayHours } from './logic.js';
 const URL = import.meta.env.VITE_SUPABASE_URL;
 const ANON = import.meta.env.VITE_SUPABASE_ANON_KEY;
 export const isLocal = !URL || !ANON;
+
+// Link arrivato dalla mail di recupero password, oppure con un errore (per esempio scaduto).
+// Va letto prima che Supabase pulisca l'indirizzo.
+export const authLink = (() => {
+  if (typeof location === 'undefined') return {};
+  const p = new URLSearchParams(location.hash.slice(1));
+  const error = Boolean(p.get('error') || p.get('error_code'));
+  // Toglie l'errore dall'indirizzo, così non ricompare a ogni ricaricamento.
+  if (error) history.replaceState(null, '', location.pathname + location.search);
+  return { recovery: p.get('type') === 'recovery', error };
+})();
 const DEFAULT_TIMES = ['13:00', '17:30'];
 
 // Errore di rete, non del server: la richiesta non è arrivata o la risposta si è persa.
@@ -47,6 +58,9 @@ function supabaseStore() {
     },
     async signIn(email, password) { clearCache(); must(await db.auth.signInWithPassword({ email, password })); },
     async signOut() { clearCache(); await db.auth.signOut(); },
+    // La mail porta a questa stessa app, che poi chiede la nuova password.
+    async resetPassword(email) { must(await db.auth.resetPasswordForEmail(email, { redirectTo: `${location.origin}/` })); },
+    async updatePassword(password) { must(await db.auth.updateUser({ password })); },
     async token() { return (await this.session())?.access_token; },
     async listEntries(from, to) {
       return readThrough(`entries:${from}:${to}`, async () => must(await db.from('entries').select('*').gte('day', from).lte('day', to).order('created_at')).map(toEntry));
@@ -122,6 +136,8 @@ function localStore() {
     async session() { return { local: true }; },
     async signIn() {},
     async signOut() {},
+    async resetPassword() {},
+    async updatePassword() {},
     async token() { return null; },
     async listEntries(from, to) { return read().entries.filter(e => e.day >= from && e.day <= to); },
     async listAllEntries() { return read().entries; },

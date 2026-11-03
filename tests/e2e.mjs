@@ -439,6 +439,56 @@ const s2 = await serve('dist-remote', 4302);
   assert.deepEqual(remote.entries.map(e => e.hours).sort(), [2.5, 4]);
   assert.deepEqual(remote.settings.times, ['13:00']);
 }
+{
+  // Recupero password: richiesta del link, arrivo dal link con nuova password, link scaduto
+  const [p, c] = await page('', { viewport: { width: 420, height: 800 } });
+  const user = { id: '00000000-0000-0000-0000-000000000002', aud: 'authenticated', role: 'authenticated', email: 'a@b.it' };
+  const cors = { 'access-control-allow-origin': '*', 'access-control-allow-headers': '*', 'access-control-allow-methods': '*' };
+  const calls = [];
+  await c.route('https://fake.supabase.co/**', route => {
+    const r = route.request(), u = new URL(r.url());
+    const json = (body, status = 200) => route.fulfill({ status, headers: cors, contentType: 'application/json', body: JSON.stringify(body) });
+    if (r.method() === 'OPTIONS') return route.fulfill({ status: 204, headers: cors });
+    if (u.pathname === '/auth/v1/recover') { calls.push(['recover', r.postDataJSON().email, u.searchParams.get('redirect_to')]); return json({}); }
+    if (u.pathname === '/auth/v1/user' && r.method() === 'GET') return json(user);
+    if (u.pathname === '/auth/v1/user' && r.method() === 'PUT') { calls.push(['password', r.postDataJSON().password]); return json(user); }
+    if (u.pathname === '/rest/v1/reminder_settings') return json({ times: [] });
+    if (u.pathname.startsWith('/rest/v1/')) return json([]);
+    return json({}, 404);
+  });
+  await p.goto('http://localhost:4302/');
+  await p.click('#forgot');
+  await p.click('#send-reset');
+  assert.match(await p.textContent('.err'), /indirizzo email/);
+  await p.fill('#reset-email', 'a@b.it'); await p.click('#send-reset');
+  await p.waitForSelector('#reset-sent');
+  assert.deepEqual(calls.shift(), ['recover', 'a@b.it', 'http://localhost:4302/']);
+  await p.click('#back-to-login');
+  await p.waitForSelector('#login-form');
+
+  // Il link della mail apre una pagina nuova: cambiare solo il # non ricaricherebbe l'app.
+  await p.goto('about:blank');
+  await p.goto('http://localhost:4302/#access_token=x.eyJleHAiOjk5OTk5OTk5OTl9.y&expires_at=9999999999&expires_in=3600&refresh_token=r&token_type=bearer&type=recovery');
+  await p.waitForSelector('#password-form');
+  await p.fill('#new-password', 'corta'); await p.fill('#new-password-2', 'corta'); await p.click('#save-password');
+  assert.match(await p.textContent('.err'), /almeno 8/);
+  await p.fill('#new-password', 'nuova-password'); await p.fill('#new-password-2', 'diversa-password'); await p.click('#save-password');
+  assert.match(await p.textContent('.err'), /non coincidono/);
+  await p.fill('#new-password', 'nuova-password'); await p.fill('#new-password-2', 'nuova-password'); await p.click('#save-password');
+  await p.waitForSelector('#entry-form, #app');
+  await p.waitForFunction(() => /Password aggiornata/.test(document.getElementById('toast').textContent));
+  assert.deepEqual(calls.shift(), ['password', 'nuova-password']);
+  assert.equal(new URL(p.url()).hash, '');
+
+  await p.evaluate(() => localStorage.clear());
+  // Il link della mail apre una pagina nuova: cambiare solo il # non ricaricherebbe l'app.
+  await p.goto('about:blank');
+  await p.goto('http://localhost:4302/#error=access_denied&error_code=otp_expired&error_description=Email+link+is+invalid+or+has+expired');
+  await p.waitForSelector('#login-form');
+  assert.match(await p.textContent('.err'), /non è più valido/);
+  assert.equal(new URL(p.url()).hash, '');
+  await p.screenshot({ path: `${OUT}/login.png` });
+}
 process.kill(-s2.pid);
 await b.close();
 assert.deepEqual(errs, []);
