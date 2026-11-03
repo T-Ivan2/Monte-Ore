@@ -1,8 +1,15 @@
 import { holidayName, isWeekend, romeNow, dueTimes, reminderBody, targetFor } from '../../src/logic.js';
 
 // Decide chi avvisare. Le dipendenze sono passate da fuori per poterla testare senza rete.
-// actionsFor è facoltativa: aggiunge i pulsanti al promemoria; se fallisce il promemoria parte comunque senza.
-export async function runReminders({ listSettings, claim, release, hoursFor, notify, actionsFor }, date = new Date()) {
+async function optional(fn, args, fallback, what) {
+  if (!fn) return fallback;
+  try { return await fn(...args); }
+  catch (err) { console.error(`reminder ${what} failed`, args[0], err?.message || err); return fallback; }
+}
+
+// actionsFor e badgeFor sono facoltative: aggiungono i pulsanti e il numero sull'icona.
+// Se falliscono, il promemoria parte comunque senza.
+export async function runReminders({ listSettings, claim, release, hoursFor, notify, actionsFor, badgeFor }, date = new Date()) {
   const { day, time } = romeNow(date);
   if (isWeekend(day) || holidayName(day)) return { sent: 0, failed: 0, skipped: 'non lavorativo' };
   let sent = 0, failed = 0;
@@ -17,12 +24,11 @@ export async function runReminders({ listSettings, claim, release, hoursFor, not
     try {
       const missing = target - await hoursFor(user_id, day);
       if (missing > 0) {
-        let actions = [];
-        if (actionsFor) {
-          try { actions = await actionsFor(user_id, day, missing); }
-          catch (err) { console.error('reminder actions failed', user_id, err?.message || err); }
-        }
-        await notify(user_id, { title: 'Monte Ore', body: reminderBody(missing), url: '/', tag: `ore-${day}`, actions });
+        const [actions, badge] = await Promise.all([
+          optional(actionsFor, [user_id, day, missing], [], 'actions'),
+          optional(badgeFor, [user_id, day], undefined, 'badge')
+        ]);
+        await notify(user_id, { title: 'Monte Ore', body: reminderBody(missing), url: '/', tag: `ore-${day}`, actions, badge });
         sent += 1;
       }
     } catch (err) {

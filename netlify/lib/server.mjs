@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import webpush from 'web-push';
+import { monthDays, incompleteDays } from '../../src/logic.js';
 
 export function adminClient() {
   return createClient(process.env.VITE_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY, {
@@ -51,4 +52,16 @@ export async function loadQuickContext(db, userId, day) {
 export async function insertEntries(db, userId, rows) {
   const { error } = await db.from('entries').insert(rows.map(r => ({ ...r, user_id: userId })));
   if (error) throw error;
+}
+
+// Numero da mostrare sull'icona: giorni incompleti del mese in corso, oggi compreso.
+export async function countIncomplete(db, userId, today) {
+  const month = today.slice(0, 7);
+  const [entries, settings] = await Promise.all([
+    db.from('entries').select('day, hours').eq('user_id', userId).gte('day', `${month}-01`).lte('day', today),
+    db.from('reminder_settings').select('day_hours').eq('user_id', userId).maybeSingle()
+  ]);
+  for (const r of [entries, settings]) if (r.error) throw r.error;
+  const rows = entries.data.map(e => ({ ...e, hours: Number(e.hours) }));
+  return incompleteDays(monthDays(month), today, rows, settings.data?.day_hours?.map(Number)).length;
 }

@@ -74,6 +74,11 @@ export function targetFor(k, dayHours = DEFAULT_DAY_HOURS) {
   const h = Number(dayHours?.[(parse(k).getDay() + 6) % 7]);
   return Number.isFinite(h) ? h : TARGET;
 }
+// Giorni fino a oggi compreso con meno ore di quelle previste. Lo usano la scheda Mese e il contatore sull'icona.
+export function incompleteDays(days, today, entries, dayHours) {
+  const total = d => entries.filter(e => e.day === d).reduce((n, e) => n + e.hours, 0);
+  return days.filter(d => d <= today && targetFor(d, dayHours) > 0 && total(d) < targetFor(d, dayHours));
+}
 export const isHalfHours = h => Number.isFinite(h) && h >= 0 && h <= 24 && (h * 2) % 1 === 0;
 export const validDayHours = arr => Array.isArray(arr) && arr.length === 5 && arr.every(isHalfHours);
 // Ore medie di una giornata lavorata, per convertire le ore in giornate.

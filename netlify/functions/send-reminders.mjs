@@ -1,5 +1,5 @@
 import { runReminders } from '../lib/reminders.mjs';
-import { adminClient, sendToUser, loadQuickContext } from '../lib/server.mjs';
+import { adminClient, sendToUser, loadQuickContext, countIncomplete } from '../lib/server.mjs';
 import { quickActions } from '../lib/quick.mjs';
 import { quickSecret } from '../lib/token.mjs';
 
@@ -30,6 +30,7 @@ export default async () => {
     async actionsFor(user_id, day, missing) {
       return quickActions(await loadQuickContext(db, user_id, day), { user_id, day, missing }, quickSecret());
     },
+    badgeFor: (user_id, day) => countIncomplete(db, user_id, day),
     notify: (user_id, payload) => sendToUser(db, user_id, payload)
   });
   console.log('reminders', result);

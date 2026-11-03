@@ -6,6 +6,7 @@ import { readFileSync } from 'node:fs';
 const require = createRequire(process.env.PLAYWRIGHT_FROM || import.meta.url);
 const { chromium } = require('playwright');
 const OUT = process.env.SHOTS || '.';
+const badge = p => p.evaluate(() => window.__badges.at(-1));
 const NOW = new Date('2026-11-04T10:00:00+01:00');
 
 async function serve(dir, port) {
@@ -27,6 +28,12 @@ const errs = [];
 const CSP = readFileSync('netlify.toml', 'utf8').match(/Content-Security-Policy = "([^"]+)"/)[1];
 async function page(url, opts) {
   const c = await b.newContext({ serviceWorkers: 'block', ...opts });
+  // Registra i valori mandati al contatore sull'icona.
+  await c.addInitScript(() => {
+    window.__badges = [];
+    navigator.setAppBadge = n => { window.__badges.push(n); return Promise.resolve(); };
+    navigator.clearAppBadge = () => { window.__badges.push(0); return Promise.resolve(); };
+  });
   await c.route('http://localhost:*/**', async route => {
     const res = await route.fetch();
     route.fulfill({ response: res, headers: { ...res.headers(), 'content-security-policy': CSP } });
@@ -46,6 +53,8 @@ const s1 = await serve('dist', 4301);
   await p.waitForSelector('#entry-form');
   assert.match(await p.textContent('.dayhead h2'), /Mercoledì 4 novembre/);
   assert.match(await p.textContent('.state'), /0 di 8 h · Mancano 8 h/);
+  // Lunedì 2, martedì 3 e mercoledì 4 (oggi) sono incompleti
+  assert.equal(await badge(p), 3);
   await p.click('#save');
   assert.match(await p.textContent('#e-code'), /Inserisci il codice/);
 
@@ -67,6 +76,7 @@ const s1 = await serve('dist', 4301);
   await p.click('#save');
   await p.waitForFunction(() => /Completo/.test(document.querySelector('.state').textContent));
   assert.equal(await p.locator('#entry-form').count(), 0);
+  assert.equal(await badge(p), 2);
   await p.screenshot({ path: `${OUT}/day.png`, fullPage: true });
   await p.click('[id^=edit-] >> nth=0');
   await p.fill('#f-hours', '4');
@@ -98,6 +108,7 @@ const s1 = await serve('dist', 4301);
   await p.waitForFunction(() => /8 di 8 h/.test(document.querySelector('.state').textContent));
   await p.click('#tab-tasks');
   await p.waitForSelector('[data-act=donetask]');
+  assert.equal(await badge(p), 1);
   assert.equal(await p.locator('[data-act=donetask]').count(), 2);
   const taskText = await p.textContent('.list');
   assert.match(taskText, /TASK0048231[\s\S]*9 h/);

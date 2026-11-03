@@ -66,6 +66,14 @@ Se riesegui per errore una migrazione già applicata si ferma con un messaggio e
 
 Usa **Prova notifica** per controllare che l'invio funzioni, poi verifica che arrivi un promemoria a un orario impostato.
 
+### Contatore sull'icona
+
+L'icona dell'app mostra quanti giorni del mese in corso sono incompleti, oggi compreso: lo stesso numero della scheda Mese. Si aggiorna quando usi l'app, a ogni promemoria e quando premi un pulsante su una notifica.
+
+- **iPhone:** serve l'app aggiunta alla schermata Home con le notifiche attive (iOS 16.4 o successivo). Il numero si vede se in **Impostazioni > Notifiche > Monte Ore** è attivo **Badge**.
+- **Computer:** Chrome ed Edge con l'app installata.
+- **Android:** Chrome non supporta il numero sull'icona. Il launcher mostra solo un pallino quando c'è una notifica.
+
 ### Pulsanti sui promemoria
 
 Su Android e sul computer (Chrome, Edge) il promemoria ha fino a due pulsanti, che registrano le ore senza aprire l'app:

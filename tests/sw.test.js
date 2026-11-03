@@ -4,8 +4,9 @@ import vm from 'node:vm';
 import { describe, it, expect } from 'vitest';
 
 function loadSW(fetchImpl) {
-  const handlers = {}, shown = [], requests = [], opened = [];
+  const handlers = {}, shown = [], requests = [], opened = [], badges = [];
   const self = {
+    navigator: { setAppBadge: async n => { badges.push(n); }, clearAppBadge: async () => { badges.push(0); } },
     addEventListener: (type, fn) => { handlers[type] = fn; },
     registration: { showNotification: async (title, opts) => { shown.push({ title, ...opts }); } },
     clients: { matchAll: async () => [], openWindow: async url => { opened.push(url); }, claim: async () => {} },
@@ -19,7 +20,7 @@ function loadSW(fetchImpl) {
     handlers[type]({ ...ev, waitUntil: p => waits.push(p) });
     await Promise.all(waits);
   };
-  return { fire, shown, requests, opened };
+  return { fire, shown, requests, opened, badges };
 }
 const notification = data => ({ data, close: () => {} });
 
@@ -33,10 +34,16 @@ describe('service worker', () => {
     expect(sw.shown[0].actions).toEqual([{ action: 'a0', title: 'Copia da mar 3 · 8 h' }, { action: 'a1', title: '+8 h su T1' }]);
     expect(sw.shown[0].data.tokens).toEqual({ a0: 'tok0', a1: 'tok1' });
   });
-  it('funziona anche con un promemoria senza pulsanti', async () => {
+  it('funziona anche con un promemoria senza pulsanti né contatore', async () => {
     const sw = loadSW();
     await sw.fire('push', { data: { json: () => ({ body: 'x' }) } });
     expect(sw.shown[0].actions).toEqual([]);
+    expect(sw.badges).toEqual([]);
+  });
+  it('aggiorna il numero sull\'icona dal promemoria', async () => {
+    const sw = loadSW();
+    await sw.fire('push', { data: { json: () => ({ ...payload, badge: 2 }) } });
+    expect(sw.badges).toEqual([2]);
   });
   it('registra le ore dal pulsante e mostra l\'esito', async () => {
     const sw = loadSW(async () => ({ json: async () => ({ ok: true, message: 'Registrate 8 h su T1 (Inpeco).' }) }));
@@ -44,6 +51,12 @@ describe('service worker', () => {
     expect(sw.requests).toEqual([{ url: '/api/quick-log', body: { token: 'tok1' } }]);
     expect(sw.shown[0].body).toBe('Registrate 8 h su T1 (Inpeco).');
     expect(sw.opened).toEqual([]);
+    expect(sw.badges).toEqual([]);
+  });
+  it('toglie il numero quando il pulsante completa il mese', async () => {
+    const sw = loadSW(async () => ({ json: async () => ({ ok: true, message: 'ok', badge: 0 }) }));
+    await sw.fire('notificationclick', { action: 'a0', notification: notification({ url: '/', tokens: { a0: 'tok0' } }) });
+    expect(sw.badges).toEqual([0]);
   });
   it('avvisa se la rete non risponde', async () => {
     const sw = loadSW(async () => { throw new Error('offline'); });

@@ -6,6 +6,7 @@ import { renderDay } from './views/day.js';
 import { renderTasks } from './views/tasks.js';
 import { renderMonth } from './views/month.js';
 import { renderHours, renderNotif } from './views/panels.js';
+import { updateBadge } from './badge.js';
 
 const root = document.getElementById('root');
 
@@ -47,5 +48,7 @@ export function renderShell() {
 export function render() {
   for (const v of ['day', 'tasks', 'month']) document.getElementById(`tab-${v}`).setAttribute('aria-selected', S.view === v);
   if (S.view === 'month') renderMonth(); else if (S.view === 'tasks') renderTasks(); else renderDay();
+  // Ogni modifica passa da qui, quindi il contatore resta sempre allineato.
+  updateBadge();
 }
 export function renderPanels() { renderHours(); renderNotif(); }

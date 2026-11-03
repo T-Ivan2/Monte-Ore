@@ -1,4 +1,5 @@
-import { adminClient, loadQuickContext, insertEntries } from '../lib/server.mjs';
+import { adminClient, loadQuickContext, insertEntries, countIncomplete } from '../lib/server.mjs';
+import { romeNow } from '../../src/logic.js';
 import { verifyToken, quickSecret } from '../lib/token.mjs';
 import { runQuickLog } from '../lib/quick.mjs';
 
@@ -15,6 +16,8 @@ export default async req => {
       loadContext: (userId, day) => loadQuickContext(db, userId, day),
       insertEntries: (userId, rows) => insertEntries(db, userId, rows)
     }, claims);
+    // Numero aggiornato per l'icona; se non si riesce a calcolarlo l'icona resta com'era.
+    try { result.badge = await countIncomplete(db, claims.u, romeNow().day); } catch { /* facoltativo */ }
     return Response.json(result);
   } catch (err) {
     console.error('quick-log failed', err?.message || err);
