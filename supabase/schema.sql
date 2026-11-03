@@ -54,10 +54,20 @@ create or replace view public.task_hours with (security_invoker = on) as
   left join public.entries e on e.user_id = t.user_id and e.who = t.who and e.code = t.code
   group by t.user_id, t.who, t.code, t.done_at, t.created_at;
 
+-- Impostazioni dell'utente: orari dei promemoria e ore previste da lunedì a venerdì.
 create table if not exists public.reminder_settings (
   user_id uuid primary key default auth.uid() references auth.users (id) on delete cascade,
   times text[] not null default '{13:00,17:30}'
 );
+alter table public.reminder_settings add column if not exists day_hours numeric(3, 1)[] not null default '{8,8,8,8,8}';
+
+create or replace function public.valid_day_hours(h numeric[]) returns boolean
+language sql immutable as $$
+  select cardinality(h) = 5
+     and (select bool_and(coalesce(x between 0 and 24 and mod(x * 2, 1) = 0, false)) from unnest(h) x)
+$$;
+alter table public.reminder_settings drop constraint if exists reminder_day_hours_format;
+alter table public.reminder_settings add constraint reminder_day_hours_format check (public.valid_day_hours(day_hours));
 
 -- Al massimo 12 orari, ognuno nel formato HH:MM. Nessun orario significa notifiche spente.
 create or replace function public.valid_reminder_times(t text[]) returns boolean

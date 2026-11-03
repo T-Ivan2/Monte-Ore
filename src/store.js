@@ -1,5 +1,6 @@
 // Accesso ai dati. Senza variabili Supabase l'app gira in locale nel browser, utile per sviluppo e test.
 import { createClient } from '@supabase/supabase-js';
+import { DEFAULT_DAY_HOURS, validDayHours } from './logic.js';
 
 const URL = import.meta.env.VITE_SUPABASE_URL;
 const ANON = import.meta.env.VITE_SUPABASE_ANON_KEY;
@@ -23,8 +24,10 @@ function supabaseStore() {
       return must(await db.from('entries').select('*').gte('day', from).lte('day', to).order('created_at')).map(toEntry);
     },
     async addEntry(e) { return toEntry(must(await db.from('entries').insert(e).select().single())); },
+    async addEntries(rows) { return must(await db.from('entries').insert(rows).select()).map(toEntry); },
     async updateEntry(id, e) { return toEntry(must(await db.from('entries').update(e).eq('id', id).select().single())); },
     async removeEntry(id) { must(await db.from('entries').delete().eq('id', id)); },
+    async removeEntries(ids) { must(await db.from('entries').delete().in('id', ids)); },
     async listTasks() {
       return must(await db.from('task_hours').select('*').order('last_day', { ascending: false, nullsFirst: false })).map(t => ({ ...t, hours: Number(t.hours) }));
     },
@@ -32,15 +35,22 @@ function supabaseStore() {
       must(await db.from('tasks').update({ done_at: done ? new Date().toISOString() : null }).eq('who', who).eq('code', code));
     },
     async removeTask(who, code) { must(await db.from('tasks').delete().eq('who', who).eq('code', code)); },
-    async getTimes() {
-      const row = must(await db.from('reminder_settings').select('times').maybeSingle());
-      if (row) return row.times;
-      must(await db.from('reminder_settings').insert({ times: DEFAULT_TIMES }));
-      return DEFAULT_TIMES;
+    async getSettings() {
+      const row = must(await db.from('reminder_settings').select('times, day_hours').maybeSingle());
+      if (!row) {
+        must(await db.from('reminder_settings').insert({ times: DEFAULT_TIMES, day_hours: DEFAULT_DAY_HOURS }));
+        return { times: DEFAULT_TIMES, dayHours: DEFAULT_DAY_HOURS };
+      }
+      const dayHours = row.day_hours?.map(Number);
+      return { times: row.times, dayHours: validDayHours(dayHours) ? dayHours : DEFAULT_DAY_HOURS };
     },
     async setTimes(times) {
       const { user } = must(await db.auth.getUser());
       must(await db.from('reminder_settings').upsert({ user_id: user.id, times }));
+    },
+    async setDayHours(dayHours) {
+      const { user } = must(await db.auth.getUser());
+      must(await db.from('reminder_settings').upsert({ user_id: user.id, day_hours: dayHours }));
     },
     async savePush(sub) {
       const { endpoint, keys } = sub.toJSON();
@@ -56,7 +66,7 @@ function localStore() {
   const read = () => {
     let s;
     try { s = JSON.parse(localStorage.getItem(KEY)); } catch { /* riparte da vuoto */ }
-    return { entries: [], tasks: [], times: DEFAULT_TIMES, ...s };
+    return { entries: [], tasks: [], times: DEFAULT_TIMES, dayHours: DEFAULT_DAY_HOURS, ...s };
   };
   const touch = (s, e) => {
     if (!e.code) return;
@@ -75,6 +85,7 @@ function localStore() {
       const s = read(), row = { description: '', ...e, id: crypto.randomUUID() };
       s.entries.push(row); touch(s, row); write(s); return row;
     },
+    async addEntries(rows) { const out = []; for (const r of rows) out.push(await this.addEntry(r)); return out; },
     async updateEntry(id, e) {
       const s = read(), i = s.entries.findIndex(x => x.id === id);
       const before = s.entries[i];
@@ -83,6 +94,7 @@ function localStore() {
       write(s); return s.entries[i];
     },
     async removeEntry(id) { const s = read(); s.entries = s.entries.filter(x => x.id !== id); write(s); },
+    async removeEntries(ids) { const s = read(); s.entries = s.entries.filter(x => !ids.includes(x.id)); write(s); },
     async listTasks() {
       const s = read();
       return s.tasks.map(t => {
@@ -96,8 +108,9 @@ function localStore() {
       write(s);
     },
     async removeTask(who, code) { const s = read(); s.tasks = s.tasks.filter(t => !(t.who === who && t.code === code)); write(s); },
-    async getTimes() { return read().times; },
+    async getSettings() { const s = read(); return { times: s.times, dayHours: s.dayHours }; },
     async setTimes(times) { const s = read(); s.times = times; write(s); },
+    async setDayHours(dayHours) { const s = read(); s.dayHours = dayHours; write(s); },
     async savePush() {},
     async removePush() {}
   };

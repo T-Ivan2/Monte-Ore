@@ -9,12 +9,14 @@ import '@fontsource/ibm-plex-mono/latin-500.css';
 import '@fontsource/ibm-plex-mono/latin-600.css';
 import './style.css';
 import {
-  TARGET, PROJECTS, ABSENCES, WHO, DOW, MONTHS, key, parse, addDays, monday, weekDays, fmt, isAbsence,
-  isWeekend, holidayName, monthWeekdays, monthBounds, shiftMonth, validateEntry, parseHours, normalizeCode
+  PROJECTS, ABSENCES, WHO, DOW, MONTHS, DEFAULT_DAY_HOURS, key, parse, addDays, monday, weekDays, fmt, isAbsence,
+  isWeekend, holidayName, monthDays, monthBounds, shiftMonth, validateEntry, parseHours, normalizeCode,
+  targetFor, isHalfHours, dayLength
 } from './logic.js';
 import { store, isLocal } from './store.js';
 import { pushStatus, enablePush, disablePush, syncPush, testPush } from './push.js';
 
+const CLOCK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>';
 const BELL = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9a6 6 0 1 1 12 0c0 6 2.5 7.5 2.5 7.5h-17S6 15 6 9"/><path d="M10.3 20a2 2 0 0 0 3.4 0"/></svg>';
 const today = () => key(new Date());
 const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -25,16 +27,26 @@ const weekLabel = mon => {
     ? `${a.getDate()}–${b.getDate()} ${MONTHS[a.getMonth()]}`
     : `${a.getDate()} ${MONTHS[a.getMonth()].slice(0, 3)} – ${b.getDate()} ${MONTHS[b.getMonth()].slice(0, 3)}`;
 };
-// Il sabato e la domenica si aprono dal lunedì successivo.
-const startDay = () => { const t = today(); return isWeekend(t) ? monday(addDays(t, 2)) : t; };
+const shortLabel = k => { const d = parse(k); return `${DOW[(d.getDay() + 6) % 7].toLowerCase()} ${d.getDate()} ${MONTHS[d.getMonth()]}`; };
+// Il sabato e la domenica si aprono sul venerdì se è incompleto, altrimenti sul lunedì successivo.
+const startDay = () => {
+  const t = today();
+  if (!isWeekend(t)) return t;
+  const fri = addDays(monday(t), 4);
+  return dayTotal(fri) < target(fri) ? fri : monday(addDays(t, 2));
+};
 
 const root = document.getElementById('root');
 let entries = [];
 let tasks = [];
 let loaded = new Set();
 let times = [];
+let dayHours = DEFAULT_DAY_HOURS;
+let hoursOpen = false;
+let hoursError = '';
 let view = 'day';
-let selected = startDay();
+// Valore provvisorio: nel weekend startApp sceglie il giorno quando i dati sono caricati.
+let selected = isWeekend(today()) ? monday(addDays(today(), 2)) : today();
 let week = monday(selected);
 let month = selected.slice(0, 7);
 let lastProject = 'shueco';
@@ -50,7 +62,22 @@ let toastTimer;
 
 const dayEntries = d => entries.filter(e => e.day === d);
 const dayTotal = d => dayEntries(d).reduce((s, e) => s + e.hours, 0);
-const rest = d => holidayName(d) ? 0 : Math.max(0, TARGET - dayTotal(d));
+const target = d => targetFor(d, dayHours);
+const rest = d => Math.max(0, target(d) - dayTotal(d));
+// Giorno libero: weekend, festivo o giorno impostato a zero ore.
+const offLabel = d => holidayName(d) ? `${holidayName(d)}, festivo` : isWeekend(d) ? 'Weekend' : 'Giorno libero';
+// Ultimo giorno con voci nei 7 precedenti, da proporre come copia per un giorno vuoto.
+function copySource(d) {
+  for (let i = 1; i <= 7; i++) {
+    const src = addDays(d, -i);
+    const rows = copyable(src);
+    if (rows.length) return { day: src, rows, skipped: dayEntries(src).length - rows.length };
+    if (dayEntries(src).length) return null;
+  }
+  return null;
+}
+// Non copia le voci su task terminate: copiarle le riaprirebbe.
+const copyable = d => dayEntries(d).filter(e => !e.code || tasks.some(t => t.who === e.who && t.code === e.code && !t.done_at));
 
 const openTasks = who => tasks.filter(t => t.who === who && !t.done_at);
 // Con una sola task aperta la propone già selezionata. Senza task aperte chiede il codice.
@@ -92,8 +119,12 @@ function renderShell() {
   root.innerHTML = `<div class="wrap">
     <header>
       <h1>Monte Ore</h1>
-      <button class="quiet" data-act="notif" id="notif-toggle" aria-expanded="false"></button>
+      <div class="row">
+        <button class="quiet" data-act="hours" id="hours-toggle" aria-expanded="false"></button>
+        <button class="quiet" data-act="notif" id="notif-toggle" aria-expanded="false"></button>
+      </div>
     </header>
+    <section class="panel" id="hours-panel" aria-label="Ore previste" hidden></section>
     <section class="panel" id="notif-panel" aria-label="Notifiche" hidden></section>
     <div class="tabs" role="tablist" aria-label="Vista">
       <button role="tab" id="tab-day" data-act="view" data-view="day">Giorno</button>
@@ -119,13 +150,14 @@ function renderDay() {
   const t0 = today();
   const days = weekDays(week);
   const items = dayEntries(selected);
-  const total = dayTotal(selected), hol = holidayName(selected), r = rest(selected);
-  const open = !hol && (editing !== null || forceOpen || r > 0);
-  const statusText = hol ? `<span>${hol}, festivo</span>`
-    : total > TARGET ? `<b>${fmt(total)}</b> di ${TARGET} h · <span class="warn">${fmt(total - TARGET)} h in più</span>`
-    : r === 0 ? `<b>${fmt(total)}</b> di ${TARGET} h · <span class="ok">Completo</span>`
-    : selected <= t0 ? `<b>${fmt(total)}</b> di ${TARGET} h · <span class="warn">Mancano ${fmt(r)} h</span>`
-    : `<b>${fmt(total)}</b> di ${TARGET} h`;
+  const total = dayTotal(selected), tg = target(selected), r = rest(selected);
+  const open = editing !== null || forceOpen || r > 0;
+  const statusText = tg === 0 ? `${total ? `<b>${fmt(total)}</b> h · ` : ''}<span>${offLabel(selected)}</span>`
+    : total > tg ? `<b>${fmt(total)}</b> di ${fmt(tg)} h · <span class="warn">${fmt(total - tg)} h in più</span>`
+    : r === 0 ? `<b>${fmt(total)}</b> di ${fmt(tg)} h · <span class="ok">Completo</span>`
+    : selected <= t0 ? `<b>${fmt(total)}</b> di ${fmt(tg)} h · <span class="warn">Mancano ${fmt(r)} h</span>`
+    : `<b>${fmt(total)}</b> di ${fmt(tg)} h`;
+  const copy = !items.length && editing === null && tg > 0 ? copySource(selected) : null;
   const activeId = document.activeElement?.id;
   app.innerHTML = `
     <section class="week" aria-label="Settimana">
@@ -137,15 +169,16 @@ function renderDay() {
         ${selected === startDay() ? '' : '<button class="link" data-act="today" id="go-today">Vai a oggi</button>'}
       </div>
       <div class="strip">${days.map((d, i) => {
-        const t = dayTotal(d), h = holidayName(d);
-        const cls = [d === selected ? 'sel' : '', !h && t === TARGET ? 'done' : '', !h && ((d <= t0 && t < TARGET) || t > TARGET) ? 'lack' : ''].join(' ');
-        return `<button class="${cls}" data-act="select" data-day="${d}" id="strip-${d}" aria-pressed="${d === selected}" aria-label="${dayLabel(d)}, ${h ? 'festivo' : fmt(t) + ' ore'}">${DOW[i].slice(0, 3)} ${parse(d).getDate()}${d === t0 ? ' •' : ''}<b>${h ? '–' : fmt(t)}</b></button>`;
+        const t = dayTotal(d), tg = target(d);
+        const cls = [d === selected ? 'sel' : '', tg === 0 ? 'off' : '', tg > 0 && t === tg ? 'done' : '', tg > 0 && ((d <= t0 && t < tg) || t > tg) ? 'lack' : ''].join(' ');
+        return `<button class="${cls}" data-act="select" data-day="${d}" id="strip-${d}" aria-pressed="${d === selected}" aria-label="${dayLabel(d)}, ${tg === 0 && !t ? offLabel(d) : fmt(t) + ' ore'}">${DOW[i].slice(0, 3)} ${parse(d).getDate()}${d === t0 ? ' •' : ''}<b>${tg === 0 && !t ? '–' : fmt(t)}</b></button>`;
       }).join('')}</div>
     </section>
     <section class="day">
       <div class="dayhead"><h2>${dayLabel(selected)}</h2><div class="state">${statusText}</div></div>
       ${items.length ? `<div class="list">${items.map(entryHtml).join('')}</div>` : ''}
-      ${open ? formHtml() : hol ? '' : '<div><button class="btn" data-act="openform" id="open-form">Aggiungi altre ore</button></div>'}
+      ${copy ? `<div class="row"><button class="btn" data-act="copyday" id="copy-day">Copia da ${shortLabel(copy.day)} · ${fmt(copy.rows.reduce((n, e) => n + e.hours, 0))} h</button></div>` : ''}
+      ${open ? formHtml() : `<div><button class="btn" data-act="openform" id="open-form">${items.length ? 'Aggiungi altre ore' : 'Aggiungi ore'}</button></div>`}
     </section>`;
   if (activeId) document.getElementById(activeId)?.focus();
 }
@@ -264,23 +297,24 @@ function renderMonth() {
   const app = document.getElementById('app');
   const t0 = today();
   const [y, m] = month.split('-').map(Number);
-  const days = monthWeekdays(month);
-  const working = days.filter(d => !holidayName(d));
-  const target = working.length * TARGET;
+  const days = monthDays(month);
+  const working = days.filter(d => target(d) > 0);
+  const monthTarget = working.reduce((s, d) => s + target(d), 0);
   const inMonth = entries.filter(e => e.day.slice(0, 7) === month);
   const total = inMonth.reduce((s, e) => s + e.hours, 0);
-  const late = working.filter(d => d <= t0 && dayTotal(d) < TARGET).length;
+  const late = working.filter(d => d <= t0 && dayTotal(d) < target(d)).length;
   const rows = [...PROJECTS, ...ABSENCES]
     .map(w => ({ ...w, h: inMonth.filter(e => e.who === w.id).reduce((s, e) => s + e.hours, 0) }))
     .filter(w => w.h > 0 || !isAbsence(w.id));
   const cells = [...new Set(days.map(monday))].flatMap(weekDays).map(d => {
     if (!days.includes(d)) return '<div></div>';
-    const t = dayTotal(d), h = holidayName(d);
+    const t = dayTotal(d), h = holidayName(d), tg = target(d);
     const cls = [
-      d === t0 ? 'today' : '', h ? 'holiday' : '', !h && t === TARGET ? 'done' : '',
-      !h && ((d <= t0 && t < TARGET) || t > TARGET) ? 'lack' : '', !h && d > t0 && t === 0 ? 'future' : ''
+      d === t0 ? 'today' : '', tg === 0 ? 'off' : '', h && !t ? 'holiday' : '', tg > 0 && t === tg ? 'done' : '',
+      tg > 0 && ((d <= t0 && t < tg) || t > tg) ? 'lack' : '', (tg === 0 || d > t0) && t === 0 ? 'future' : ''
     ].join(' ');
-    return `<button class="calday ${cls}" data-act="openday" data-day="${d}" id="cal-${d}" aria-label="${dayLabel(d)}, ${h ? h + ', festivo' : fmt(t) + ' ore'}"><span class="n">${parse(d).getDate()}</span><span class="t">${h ? 'Festivo' : d > t0 && t === 0 ? '–' : fmt(t)}</span></button>`;
+    const label = t ? fmt(t) : h ? 'Fest.' : tg === 0 || d > t0 ? '–' : fmt(t);
+    return `<button class="calday ${cls}" data-act="openday" data-day="${d}" id="cal-${d}" aria-label="${dayLabel(d)}, ${tg === 0 && !t ? offLabel(d) : fmt(t) + ' ore'}"><span class="n">${parse(d).getDate()}</span><span class="t">${label}</span></button>`;
   }).join('');
   const lateText = late ? `<span class="warn">${late === 1 ? '1 giorno incompleto' : late + ' giorni incompleti'}</span>` : working.some(d => d <= t0) ? '<span class="ok">Nessun giorno incompleto</span>' : '';
   app.innerHTML = `
@@ -294,10 +328,10 @@ function renderMonth() {
     <div class="row"><button class="btn" data-act="exportxlsx" id="export-xlsx" ${inMonth.length ? '' : 'disabled'}>Esporta in Excel</button></div>
     <section class="bank" aria-label="Monte ore del mese">
       <div class="banktop">
-        <div class="bankfig">${fmt(total)} <span>di ${target} h</span></div>
+        <div class="bankfig">${fmt(total)} <span>di ${fmt(monthTarget)} h</span></div>
         <div class="state">${lateText}</div>
       </div>
-      <div class="bar" aria-hidden="true">${rows.filter(w => w.h > 0).map(w => `<i style="width:${(w.h / Math.max(target, total, 1)) * 100}%;background:${w.color}"></i>`).join('')}</div>
+      <div class="bar" aria-hidden="true">${rows.filter(w => w.h > 0).map(w => `<i style="width:${(w.h / Math.max(monthTarget, total, 1)) * 100}%;background:${w.color}"></i>`).join('')}</div>
       <div class="legend">${rows.map(w => `<span style="--client:${w.color}"><span class="dot"></span>${w.name} <b>${fmt(w.h)} h</b></span>`).join('')}</div>
     </section>
     <section class="cal" aria-label="Calendario del mese">
@@ -328,6 +362,39 @@ function renderNotif() {
     <div class="row"><button class="btn" data-act="addtime" id="add-time">Aggiungi orario</button>${pushControls()}</div>`;
   if (activeId) document.getElementById(activeId)?.focus();
 }
+/* ORE PREVISTE */
+function renderHours() {
+  const t = document.getElementById('hours-toggle');
+  if (!t) return;
+  const perWeek = dayHours.reduce((n, h) => n + h, 0);
+  t.setAttribute('aria-expanded', hoursOpen);
+  t.innerHTML = `${CLOCK}<b>${fmt(perWeek)} h<span class="wide">/sett.</span></b>`;
+  t.setAttribute('aria-label', `Ore previste: ${fmt(perWeek)} a settimana`);
+  const p = document.getElementById('hours-panel');
+  p.hidden = !hoursOpen;
+  if (!hoursOpen) return;
+  const activeId = document.activeElement?.id;
+  p.innerHTML = `<h2>Ore previste</h2>
+    <p>Le ore da registrare in ogni giorno. Metti 0 nei giorni in cui non lavori: non risulteranno incompleti e non riceverai promemoria. Sabato, domenica e festivi non prevedono ore, ma puoi registrarle.</p>
+    <div class="dayhours">${dayHours.map((h, i) => `<label class="field"><span class="lbl">${DOW[i].slice(0, 3)}</span><input class="input" id="dh-${i}" data-dh="${i}" inputmode="decimal" value="${fmt(h)}" autocomplete="off" ${hoursError ? 'aria-describedby="e-dh"' : ''}></label>`).join('')}</div>
+    ${hoursError ? `<p class="err" id="e-dh" role="alert">${hoursError}</p>` : ''}`;
+  if (activeId) document.getElementById(activeId)?.focus();
+}
+async function saveDayHours(i, raw) {
+  const h = parseHours(raw);
+  if (!isHalfHours(h)) {
+    hoursError = "Inserisci un numero di ore tra 0 e 24, a blocchi di mezz'ora.";
+    renderHours();
+    return;
+  }
+  const before = dayHours;
+  dayHours = dayHours.map((x, j) => j === i ? h : x);
+  hoursError = '';
+  renderHours(); draft = freshDraft(); render();
+  try { await store.setDayHours(dayHours); }
+  catch { dayHours = before; renderHours(); draft = freshDraft(); render(); toast('Non sono riuscito a salvare le ore previste. Riprova.'); }
+}
+
 async function saveTimes(next) {
   const before = times;
   times = [...new Set(next)].sort();
@@ -350,8 +417,10 @@ function toast(msg, undo) {
 function pickDay(d) {
   selected = d; week = monday(d); editing = null; forceOpen = false; errors = {}; draft = freshDraft();
 }
+// Carica anche la settimana prima, così "Copia" trova il giorno da cui copiare.
+const around = d => [...weekDays(addDays(monday(d), -7)), ...weekDays(monday(d))];
 async function go(d) {
-  try { await ensure(weekDays(monday(d))); } catch { loadFail(); }
+  try { await ensure(around(d)); } catch { loadFail(); }
   pickDay(d);
   render();
 }
@@ -397,6 +466,49 @@ async function saveEntry() {
   }
   busy = false; render();
 }
+async function copyDay() {
+  const src = copySource(selected);
+  if (!src || busy) return;
+  busy = true;
+  try {
+    const rows = await store.addEntries(src.rows.map(({ who, hours, code, description }) => ({ day: selected, who, hours, code, description })));
+    entries = [...entries, ...rows];
+    await refreshTasks();
+    forceOpen = false; errors = {}; draft = freshDraft();
+    render();
+    const n = rows.length === 1 ? '1 voce' : `${rows.length} voci`;
+    const skip = src.skipped ? ` Escluse ${src.skipped} su task terminate.` : '';
+    toast(`Copiate ${n} da ${shortLabel(src.day)}.${skip}`, async () => {
+      await store.removeEntries(rows.map(r => r.id));
+      const ids = new Set(rows.map(r => r.id));
+      entries = entries.filter(e => !ids.has(e.id));
+      await refreshTasks();
+      draft = freshDraft();
+    });
+  } catch { toast('Non sono riuscito a copiare le voci. Riprova.'); }
+  busy = false;
+}
+
+/* NUOVA VERSIONE */
+// Confronta lo script in esecuzione con quello pubblicato: se è cambiato propone di ricaricare.
+const runningScript = document.querySelector('script[type="module"][src^="/assets/"]')?.getAttribute('src');
+let updateShown = false;
+async function checkUpdate() {
+  if (!runningScript || updateShown) return;
+  const res = await fetch('/', { cache: 'no-store' });
+  if (!res.ok) return;
+  const html = await res.text();
+  const published = html.match(/<script[^>]*type="module"[^>]*src="(\/assets\/[^"]+)"/)?.[1];
+  if (!published || published === runningScript) return;
+  // Aggiorna la copia offline, così il ricaricamento apre subito la nuova versione.
+  try { await (await caches.open('monte-ore-v1')).put('/', new Response(html, { headers: { 'Content-Type': 'text/html; charset=utf-8' } })); } catch { /* senza cache offline */ }
+  updateShown = true;
+  const box = document.createElement('div');
+  box.className = 'notice'; box.id = 'update'; box.setAttribute('role', 'status');
+  box.innerHTML = '<button class="open" data-act="reload" id="reload">Nuova versione disponibile</button><small>Tocca per aggiornare l\'app.</small><button class="x" data-act="dismissupdate" aria-label="Chiudi">×</button>';
+  document.body.append(box);
+}
+
 async function removeEntry(id) {
   const e = entries.find(x => x.id === id);
   try {
@@ -419,16 +531,20 @@ document.addEventListener('click', async ev => {
   const b = ev.target.closest('[data-act]');
   if (!b || b.disabled) return;
   const a = b.dataset.act;
-  if (a === 'notif') { notifOpen = !notifOpen; renderNotif(); }
+  if (a === 'notif') { notifOpen = !notifOpen; hoursOpen = false; renderNotif(); renderHours(); }
+  if (a === 'hours') { hoursOpen = !hoursOpen; notifOpen = false; hoursError = ''; renderHours(); renderNotif(); }
+  if (a === 'copyday') await copyDay();
+  if (a === 'reload') { if (editing === null || confirm('Hai una modifica in corso. Ricaricare comunque?')) location.reload(); }
+  if (a === 'dismissupdate') document.getElementById('update')?.remove();
   if (a === 'view') {
     view = b.dataset.view;
-    if (view === 'month') { month = selected.slice(0, 7); try { await ensure(monthWeekdays(month)); } catch { loadFail(); } }
+    if (view === 'month') { month = selected.slice(0, 7); try { await ensure(monthDays(month)); } catch { loadFail(); } }
     if (view === 'tasks') { try { await refreshTasks(); } catch { loadFail(); } }
     render();
   }
   if (a === 'month' || a === 'thismonth') {
     month = a === 'month' ? shiftMonth(month, +b.dataset.delta) : today().slice(0, 7);
-    try { await ensure(monthWeekdays(month)); } catch { loadFail(); }
+    try { await ensure(monthDays(month)); } catch { loadFail(); }
     render();
   }
   if (a === 'openday') { view = 'day'; await go(b.dataset.day); window.scrollTo(0, 0); }
@@ -463,11 +579,11 @@ document.addEventListener('click', async ev => {
   if (a === 'deltask') await changeTask('remove', b.dataset.who, b.dataset.code);
   if (a === 'exportxlsx') {
     const inMonth = entries.filter(e => e.day.slice(0, 7) === month);
-    const target = monthWeekdays(month).filter(d => !holidayName(d)).length * TARGET;
+    const monthTarget = monthDays(month).reduce((s, d) => s + target(d), 0);
     b.disabled = true;
     try {
       const { exportMonth } = await import('./export.js');
-      const r = await exportMonth(inMonth, month, target);
+      const r = await exportMonth(inMonth, month, monthTarget, dayLength(dayHours));
       if (r === 'downloaded') toast('File Excel scaricato.');
     } catch { toast('Non sono riuscito a creare il file Excel. Riprova.'); }
     b.disabled = false;
@@ -514,6 +630,7 @@ document.addEventListener('change', async ev => {
     render();
   }
   if (t.name === 'task') { draft.code = t.value; draft.newTask = false; errors = {}; render(); }
+  if (t.dataset?.dh !== undefined) await saveDayHours(+t.dataset.dh, t.value);
   if (t.dataset?.time !== undefined) {
     const next = [...times];
     if (t.value) next[+t.dataset.time] = t.value;
@@ -537,25 +654,30 @@ document.addEventListener('visibilitychange', async () => {
   if (today() !== lastSeenDay) { lastSeenDay = today(); if (editing === null) pickDay(startDay()); }
   loaded = new Set();
   try {
-    await ensure([...weekDays(week), ...(view === 'month' ? monthWeekdays(month) : [])]);
+    await ensure([...around(week), ...(view === 'month' ? monthDays(month) : [])]);
     await refreshTasks();
     render();
   } catch { /* resta sui dati già mostrati */ }
+  checkUpdate().catch(() => {});
 });
 
 async function startApp() {
   renderShell();
   document.getElementById('app').innerHTML = '<p class="empty">Carico le ore…</p>';
   try {
-    await ensure(weekDays(week));
+    await ensure(around(today()));
     await refreshTasks();
-    times = await store.getTimes();
+    ({ times, dayHours } = await store.getSettings());
     const last = entries.filter(e => !isAbsence(e.who)).at(-1);
     if (last) lastProject = last.who;
+    // Il giorno di partenza dipende dalle ore già registrate e da quelle previste.
+    if (isWeekend(today())) { const d = startDay(); await ensure(around(d)); selected = d; week = monday(d); month = d.slice(0, 7); }
   } catch { loadFail(); }
   draft = freshDraft();
   render();
   renderNotif();
+  renderHours();
+  checkUpdate().catch(() => {});
   push = await pushStatus().catch(() => 'unavailable');
   renderNotif();
   syncPush().catch(() => {});

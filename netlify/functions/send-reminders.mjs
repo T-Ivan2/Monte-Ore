@@ -5,7 +5,7 @@ export default async () => {
   const db = adminClient();
   const result = await runReminders({
     async listSettings() {
-      const { data, error } = await db.from('reminder_settings').select('user_id, times');
+      const { data, error } = await db.from('reminder_settings').select('user_id, times, day_hours');
       if (error) throw error;
       return data;
     },

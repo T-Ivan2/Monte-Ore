@@ -1,7 +1,8 @@
 import { readFileSync } from 'node:fs';
 import { describe, it, expect } from 'vitest';
 import { PGlite } from '@electric-sql/pglite';
-import { holidayName, monthWeekdays, monday, validateEntry, romeNow, dueTimes, fmt } from '../src/logic.js';
+import { holidayName, monthDays, monday, validateEntry, romeNow, dueTimes, fmt, targetFor, validDayHours, dayLength } from '../src/logic.js';
+import { buildSheets } from '../src/export.js';
 import { runReminders } from '../netlify/lib/reminders.mjs';
 
 describe('calendario', () => {
@@ -13,10 +14,28 @@ describe('calendario', () => {
     expect(holidayName('2025-10-04')).toBeNull();
     expect(holidayName('2026-11-04')).toBeNull();
   });
-  it('conta i giorni lavorativi del mese', () => {
-    expect(monthWeekdays('2026-11')).toHaveLength(21);
-    expect(monthWeekdays('2026-10')).toHaveLength(22);
+  it('conta i giorni e le ore previste del mese', () => {
+    const due = (ym, h) => monthDays(ym).reduce((s, d) => s + targetFor(d, h), 0);
+    expect(monthDays('2026-11')).toHaveLength(30);
+    expect(due('2026-11')).toBe(168);
+    expect(due('2026-10')).toBe(176);
+    expect(due('2026-11', [8, 8, 8, 8, 4])).toBe(152);
     expect(monday('2026-11-08')).toBe('2026-11-02');
+  });
+  it('non prevede ore nel weekend, nei festivi e nei giorni a zero', () => {
+    expect(targetFor('2026-11-04')).toBe(8);
+    expect(targetFor('2026-11-07')).toBe(0);
+    expect(targetFor('2026-12-08')).toBe(0);
+    expect(targetFor('2026-11-06', [8, 8, 8, 8, 0])).toBe(0);
+    expect(targetFor('2026-11-06', [8, 8, 8, 8, 6.5])).toBe(6.5);
+  });
+  it('controlla le ore previste e calcola la giornata media', () => {
+    expect(validDayHours([8, 8, 8, 8, 4])).toBe(true);
+    expect(validDayHours([8, 8, 8, 8])).toBe(false);
+    expect(validDayHours([8, 8, 8, 8, 7.3])).toBe(false);
+    expect(validDayHours([8, 8, 8, 8, 25])).toBe(false);
+    expect(dayLength([6, 6, 6, 6, 0])).toBe(6);
+    expect(dayLength([0, 0, 0, 0, 0])).toBe(8);
   });
 });
 
@@ -103,6 +122,18 @@ describe('promemoria', () => {
     expect(await runReminders(deps, at13)).toEqual({ sent: 1, failed: 1 });
     expect(sent).toHaveLength(1);
   });
+  it('usa le ore previste dell\'utente', async () => {
+    const run = async (day_hours, hours, date) => {
+      const { sent, seen, deps } = setup(hours);
+      deps.listSettings = async () => [{ user_id: 'u', times: ['13:00'], day_hours }];
+      await runReminders(deps, date);
+      return { sent, claimed: seen.size };
+    };
+    const fri = new Date('2026-11-06T12:00:00Z');
+    expect(await run(['8', '8', '8', '8', '4'], 4, fri)).toEqual({ sent: [], claimed: 1 });
+    expect((await run(['8', '8', '8', '8', '4'], 1, fri)).sent).toEqual(['Oggi mancano 3 h da inserire.']);
+    expect(await run([8, 8, 8, 8, 0], 0, fri)).toEqual({ sent: [], claimed: 0 });
+  });
   it('formatta le mezz\'ore', () => expect(fmt(2.5)).toBe('2,5'));
 });
 
@@ -173,6 +204,18 @@ describe('schema database', () => {
       await expect(set(bad)).rejects.toThrow();
     }
   });
+  it('accetta solo ore previste valide', async () => {
+    const db = await dbReady();
+    await as(db, U1);
+    await db.exec(`insert into reminder_settings default values`);
+    expect((await db.query('select day_hours from reminder_settings')).rows[0].day_hours.map(Number)).toEqual([8, 8, 8, 8, 8]);
+    const set = h => db.exec(`update reminder_settings set day_hours = '${h}'`);
+    await expect(set('{8,8,8,8,4.5}')).resolves.toBeTruthy();
+    await expect(set('{0,0,0,0,0}')).resolves.toBeTruthy();
+    for (const bad of ['{8,8,8,8}', '{8,8,8,8,8,8}', '{8,8,8,8,4.3}', '{8,8,8,8,25}', '{8,8,8,8,-1}', '{8,8,8,8,NULL}']) {
+      await expect(set(bad)).rejects.toThrow();
+    }
+  });
   it('tiene separati i dati di ogni utente', async () => {
     const db = await dbReady();
     await as(db, U1);
@@ -184,5 +227,14 @@ describe('schema database', () => {
     expect((await db.query('select * from entries')).rows).toHaveLength(1);
     await expect(db.query('select * from reminder_log')).rejects.toThrow();
     await expect(db.exec(`insert into reminder_log values ('${U1}', '2026-11-04', '13:00')`)).rejects.toThrow();
+  });
+});
+
+describe('export', () => {
+  it('converte le ore in giornate con la giornata dell\'utente', () => {
+    const [, summary] = buildSheets([{ day: '2026-11-04', who: 'inpeco', hours: 6, code: 'T1', description: '' }], 120, 6);
+    const row = summary.data.find(r => r[0]?.value === 'Inpeco');
+    expect(row[2].value).toBe(1);
+    expect(summary.data.find(r => r[0]?.value === 'Ore previste')[2].value).toBe(20);
   });
 });
