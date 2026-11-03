@@ -51,6 +51,15 @@ function supabaseStore() {
     async listEntries(from, to) {
       return readThrough(`entries:${from}:${to}`, async () => must(await db.from('entries').select('*').gte('day', from).lte('day', to).order('created_at')).map(toEntry));
     },
+    // Tutte le voci, a pagine: Supabase restituisce al massimo 1000 righe per richiesta.
+    async listAllEntries() {
+      const all = [];
+      for (let from = 0; ; from += 1000) {
+        const page = must(await db.from('entries').select('*').order('day').order('id').range(from, from + 999));
+        all.push(...page.map(toEntry));
+        if (page.length < 1000) return all;
+      }
+    },
     async addEntry(e) { return toEntry(must(await db.from('entries').insert(e).select().single())); },
     async addEntries(rows) { return must(await db.from('entries').insert(rows).select()).map(toEntry); },
     async updateEntry(id, e) { return toEntry(must(await db.from('entries').update(e).eq('id', id).select().single())); },
@@ -115,6 +124,7 @@ function localStore() {
     async signOut() {},
     async token() { return null; },
     async listEntries(from, to) { return read().entries.filter(e => e.day >= from && e.day <= to); },
+    async listAllEntries() { return read().entries; },
     async addEntry(e) {
       const s = read(), row = { description: '', ...e, id: e.id ?? crypto.randomUUID() };
       s.entries.push(row); touch(s, row); write(s); return row;
@@ -131,7 +141,7 @@ function localStore() {
     async removeEntries(ids) { const s = read(); s.entries = s.entries.filter(x => !ids.includes(x.id)); write(s); },
     async listProjects() { return read().projects; },
     async addProject(p) {
-      const s = read(), row = { ...p, archived_at: null, created_at: new Date().toISOString() };
+      const s = read(), row = { ...p, archived_at: p.archived_at ?? null, created_at: new Date().toISOString() };
       if (s.projects.some(x => x.id === p.id)) throw new Error('duplicate');
       s.projects.push(row); write(s); return row;
     },

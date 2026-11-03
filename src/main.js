@@ -21,8 +21,12 @@ import * as day from './views/day.js';
 import * as tasks from './views/tasks.js';
 import * as month from './views/month.js';
 import * as panels from './views/panels.js';
+import { backupHandlers } from './views/backup.js';
 
+// Dopo un ripristino si ricaricano voci, task e progetti.
+const backup = backupHandlers(() => reload());
 const actions = {
+  ...backup.actions,
   ...day.actions, ...tasks.actions, ...month.actions, ...panels.actions, ...updateActions,
   view: async b => {
     S.view = b.dataset.view;
@@ -63,6 +67,7 @@ document.addEventListener('change', async ev => {
   day.onChange(ev.target);
   tasks.onChange(ev.target);
   await panels.onChange(ev.target);
+  await backup.onChange(ev.target);
 });
 document.addEventListener('submit', async ev => {
   ev.preventDefault();
