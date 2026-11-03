@@ -7,6 +7,30 @@ const ANON = import.meta.env.VITE_SUPABASE_ANON_KEY;
 export const isLocal = !URL || !ANON;
 const DEFAULT_TIMES = ['13:00', '17:30'];
 
+// Errore di rete, non del server: la richiesta non è arrivata o la risposta si è persa.
+// Chrome dice "Failed to fetch", Safari "Load failed", Firefox "NetworkError", Node "fetch failed".
+export const isNetworkError = err => (typeof navigator !== 'undefined' && navigator.onLine === false)
+  || /Failed to fetch|Load failed|NetworkError|fetch failed|network/i.test(String(err?.message ?? ''));
+
+// Copia locale dell'ultima lettura riuscita, per aprire l'app anche senza rete.
+const CACHE_KEY = 'monte-ore-cache';
+const cacheAll = () => { try { return JSON.parse(localStorage.getItem(CACHE_KEY)) || {}; } catch { return {}; } };
+const cachePut = (k, v) => { try { localStorage.setItem(CACHE_KEY, JSON.stringify({ ...cacheAll(), [k]: v })); } catch { /* storage pieno o bloccato */ } };
+export const clearCache = () => { try { localStorage.removeItem(CACHE_KEY); } catch { /* niente da togliere */ } };
+async function readThrough(k, read) {
+  try {
+    const v = await read();
+    cachePut(k, v);
+    return v;
+  } catch (err) {
+    const cached = cacheAll()[k];
+    if (isNetworkError(err) && cached !== undefined) return cached;
+    throw err;
+  }
+}
+// Supabase salva la sessione nel browser con una chiave sb-<progetto>-auth-token.
+const hasStoredSession = () => { try { return Object.keys(localStorage).some(k => /^sb-.*-auth-token$/.test(k)); } catch { return false; } };
+
 function must({ data, error }) {
   if (error) throw error;
   return data;
@@ -16,30 +40,35 @@ const toEntry = r => ({ ...r, hours: Number(r.hours), description: r.description
 function supabaseStore() {
   const db = createClient(URL, ANON);
   return {
-    async session() { return must(await db.auth.getSession()).session; },
-    async signIn(email, password) { must(await db.auth.signInWithPassword({ email, password })); },
-    async signOut() { await db.auth.signOut(); },
+    // Senza rete un token scaduto non si rinnova: se c'era un accesso, l'app parte con la copia locale.
+    async session() {
+      try { return must(await db.auth.getSession()).session; }
+      catch (err) { if (isNetworkError(err) && hasStoredSession()) return { offline: true }; throw err; }
+    },
+    async signIn(email, password) { clearCache(); must(await db.auth.signInWithPassword({ email, password })); },
+    async signOut() { clearCache(); await db.auth.signOut(); },
     async token() { return (await this.session())?.access_token; },
     async listEntries(from, to) {
-      return must(await db.from('entries').select('*').gte('day', from).lte('day', to).order('created_at')).map(toEntry);
+      return readThrough(`entries:${from}:${to}`, async () => must(await db.from('entries').select('*').gte('day', from).lte('day', to).order('created_at')).map(toEntry));
     },
     async addEntry(e) { return toEntry(must(await db.from('entries').insert(e).select().single())); },
     async addEntries(rows) { return must(await db.from('entries').insert(rows).select()).map(toEntry); },
     async updateEntry(id, e) { return toEntry(must(await db.from('entries').update(e).eq('id', id).select().single())); },
     async removeEntry(id) { must(await db.from('entries').delete().eq('id', id)); },
     async removeEntries(ids) { must(await db.from('entries').delete().in('id', ids)); },
-    async listProjects() { return must(await db.from('projects').select('id, name, color, archived_at, created_at').order('created_at')); },
+    async listProjects() { return readThrough('projects', async () => must(await db.from('projects').select('id, name, color, archived_at, created_at').order('created_at'))); },
     async addProject(p) { return must(await db.from('projects').insert(p).select('id, name, color, archived_at, created_at').single()); },
     async updateProject(id, patch) { must(await db.from('projects').update(patch).eq('id', id)); },
     async removeProject(id) { must(await db.from('projects').delete().eq('id', id)); },
     async listTasks() {
-      return must(await db.from('task_hours').select('*').order('last_day', { ascending: false, nullsFirst: false })).map(t => ({ ...t, hours: Number(t.hours) }));
+      return readThrough('tasks', async () => must(await db.from('task_hours').select('*').order('last_day', { ascending: false, nullsFirst: false })).map(t => ({ ...t, hours: Number(t.hours) })));
     },
     async setTaskDone(who, code, done) {
       must(await db.from('tasks').update({ done_at: done ? new Date().toISOString() : null }).eq('who', who).eq('code', code));
     },
     async removeTask(who, code) { must(await db.from('tasks').delete().eq('who', who).eq('code', code)); },
-    async getSettings() {
+    async getSettings() { return readThrough('settings', () => this.readSettings()); },
+    async readSettings() {
       const row = must(await db.from('reminder_settings').select('times, day_hours').maybeSingle());
       if (!row) {
         must(await db.from('reminder_settings').insert({ times: DEFAULT_TIMES, day_hours: DEFAULT_DAY_HOURS }));
@@ -87,7 +116,7 @@ function localStore() {
     async token() { return null; },
     async listEntries(from, to) { return read().entries.filter(e => e.day >= from && e.day <= to); },
     async addEntry(e) {
-      const s = read(), row = { description: '', ...e, id: crypto.randomUUID() };
+      const s = read(), row = { description: '', ...e, id: e.id ?? crypto.randomUUID() };
       s.entries.push(row); touch(s, row); write(s); return row;
     },
     async addEntries(rows) { const out = []; for (const r of rows) out.push(await this.addEntry(r)); return out; },

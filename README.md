@@ -66,6 +66,16 @@ Se riesegui per errore una migrazione già applicata si ferma con un messaggio e
 
 Usa **Prova notifica** per controllare che l'invio funzioni, poi verifica che arrivi un promemoria a un orario impostato.
 
+### Senza connessione
+
+L'app si apre anche offline, con l'ultima copia dei dati salvata sul dispositivo.
+
+- **Ore**: puoi registrarle, modificarle, copiarle ed eliminarle. Le modifiche restano in coda sul dispositivo e partono da sole appena torna la connessione, nell'ordine in cui le hai fatte. Una riga sotto le schede mostra quante ne mancano.
+- **Il resto** (progetti, task, impostazioni, notifiche) richiede la connessione.
+- Più modifiche alla stessa voce partono come una sola. Una voce aggiunta e poi eliminata offline non arriva mai al server.
+- Se una modifica non è più valida quando arriva al server, per esempio perché nel frattempo hai eliminato il progetto da un altro dispositivo, viene scartata e l'app te lo segnala.
+- Uscendo dall'account le modifiche non ancora inviate si perdono: l'app chiede conferma.
+
 ### Contatore sull'icona
 
 L'icona dell'app mostra quanti giorni del mese in corso sono incompleti, oggi compreso: lo stesso numero della scheda Mese. Si aggiorna quando usi l'app, a ogni promemoria e quando premi un pulsante su una notifica.
@@ -106,6 +116,7 @@ Ogni pulsante porta un token firmato con una chiave ricavata da `VAPID_PRIVATE_K
 | `src/logic.js` | Regole pure condivise con il server: calendario, festivi, validazioni |
 | `src/store.js` | Accesso ai dati: Supabase oppure il browser in modalità locale |
 | `src/state.js` | Stato dell'app e calcoli che ne derivano |
+| `src/outbox.js`, `src/sync.js` | Coda delle modifiche fatte offline e invio quando torna la rete |
 | `src/render.js`, `src/ui.js` | Struttura della pagina, messaggi ed elementi comuni |
 | `src/views/` | Una vista per file: giorno, task e progetti, mese, pannelli in alto |
 | `src/main.js` | Avvio e collegamento degli eventi alle azioni delle viste |

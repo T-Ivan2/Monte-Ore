@@ -1,6 +1,9 @@
 // Vista Giorno: settimana, voci del giorno e modulo per registrare le ore.
 import { ABSENCES, DOW, fmt, parse, addDays, weekDays, isAbsence, validateEntry, parseHours, normalizeCode } from '../logic.js';
-import { store } from '../store.js';
+import * as sync from '../sync.js';
+
+// Aggiunta ai messaggi quando la modifica resta in coda sul dispositivo.
+const later = queued => queued ? ' La invio appena torna la connessione.' : '';
 import {
   S, today, dayEntries, dayTotal, target, rest, offLabel, activeProjects, who, openTasks, taskChoice, freshDraft,
   copySource, startDay, around, pickDay, refreshTasks, ensure
@@ -151,22 +154,22 @@ async function saveEntry() {
   try {
     if (S.editing !== null) {
       const prev = S.entries.find(e => e.id === S.editing);
-      const row = await store.updateEntry(S.editing, value);
+      const { row, queued } = await sync.updateEntry(prev, value);
       S.entries = S.entries.map(e => e.id === row.id ? row : e);
       await refreshTasks();
       const { who: w, hours, code, description } = prev;
-      toast('Voce aggiornata.', async () => {
-        const back = await store.updateEntry(row.id, { who: w, hours, code, description });
+      toast(`Voce aggiornata.${later(queued)}`, async () => {
+        const { row: back } = await sync.updateEntry(row, { who: w, hours, code, description });
         S.entries = S.entries.map(e => e.id === back.id ? back : e);
         await refreshTasks();
         S.draft = freshDraft();
       });
     } else {
-      const row = await store.addEntry({ day: S.selected, ...value });
+      const { row, queued } = await sync.addEntry({ day: S.selected, ...value });
       S.entries = [...S.entries, row];
       await refreshTasks();
-      toast(`Salvate ${fmt(row.hours)} h su ${who(row.who).name}.`, async () => {
-        await store.removeEntry(row.id);
+      toast(`Salvate ${fmt(row.hours)} h su ${who(row.who).name}.${later(queued)}`, async () => {
+        await sync.removeEntry(row.id);
         S.entries = S.entries.filter(e => e.id !== row.id);
         await refreshTasks();
         S.draft = freshDraft();
@@ -175,7 +178,7 @@ async function saveEntry() {
     if (S.draft.kind === 'project') S.lastProject = value.who;
     S.editing = null; S.forceOpen = false; S.errors = {}; S.draft = freshDraft();
   } catch {
-    toast('Non sono riuscito a salvare. Controlla la connessione e riprova.');
+    toast('Non sono riuscito a salvare. Riprova.');
   }
   S.busy = false; render();
 }
@@ -183,15 +186,16 @@ async function saveEntry() {
 async function removeEntry(id) {
   const e = S.entries.find(x => x.id === id);
   try {
-    await store.removeEntry(id);
+    const { queued } = await sync.removeEntry(id);
     S.entries = S.entries.filter(x => x.id !== id);
     await refreshTasks();
     if (S.editing === id) S.editing = null;
     S.forceOpen = false; S.errors = {}; S.draft = freshDraft();
     render();
     const { day, who: w, hours, code, description } = e;
-    toast(`Voce eliminata: ${fmt(hours)} h ${who(w).name}.`, async () => {
-      S.entries = [...S.entries, await store.addEntry({ day, who: w, hours, code, description })];
+    toast(`Voce eliminata: ${fmt(hours)} h ${who(w).name}.${later(queued)}`, async () => {
+      const { row } = await sync.addEntry({ day, who: w, hours, code, description });
+      S.entries = [...S.entries, row];
       await refreshTasks();
       S.draft = freshDraft();
     });
@@ -203,15 +207,15 @@ async function copyDay() {
   if (!src || S.busy) return;
   S.busy = true;
   try {
-    const rows = await store.addEntries(src.rows.map(({ who: w, hours, code, description }) => ({ day: S.selected, who: w, hours, code, description })));
+    const { rows, queued } = await sync.addEntries(src.rows.map(({ who: w, hours, code, description }) => ({ day: S.selected, who: w, hours, code, description })));
     S.entries = [...S.entries, ...rows];
     await refreshTasks();
     S.forceOpen = false; S.errors = {}; S.draft = freshDraft();
     render();
     const n = rows.length === 1 ? '1 voce' : `${rows.length} voci`;
     const skip = src.skipped ? ` Escluse ${src.skipped} su task terminate.` : '';
-    toast(`Copiate ${n} da ${shortLabel(src.day)}.${skip}`, async () => {
-      await store.removeEntries(rows.map(r => r.id));
+    toast(`Copiate ${n} da ${shortLabel(src.day)}.${skip}${later(queued)}`, async () => {
+      await sync.removeEntries(rows.map(r => r.id));
       const ids = new Set(rows.map(r => r.id));
       S.entries = S.entries.filter(e => !ids.has(e.id));
       await refreshTasks();

@@ -165,3 +165,5 @@ header .row { gap: 6px; justify-content: flex-end; }
 }
 .tag { margin-left: 8px; padding: 0 6px; border: 1px solid var(--line); border-radius: 4px; font-size: 11px; font-weight: 500; color: var(--muted); vertical-align: 1px; }
 .empty.small { font-size: 13px; }
+.syncbar { margin: 0; padding: 9px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); font-size: 13px; color: var(--muted); }
+.syncbar.off { border-color: var(--warn); color: var(--ink); }

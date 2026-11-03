@@ -272,23 +272,32 @@ const s2 = await serve('dist-remote', 4302);
 {
   const [p, c] = await page('', { viewport: { width: 1000, height: 800 } });
   const inserted = [];
+  const writes = [];
+  let down = false;
   const user = { id: '00000000-0000-0000-0000-000000000001', aud: 'authenticated', role: 'authenticated', email: 'a@b.it' };
   const cors = { 'access-control-allow-origin': '*', 'access-control-allow-headers': '*', 'access-control-allow-methods': '*' };
   await c.route('https://fake.supabase.co/**', async route => {
     const r = route.request(), u = new URL(r.url());
     const json = (body, status = 200) => route.fulfill({ status, headers: cors, contentType: 'application/json', body: JSON.stringify(body) });
     if (r.method() === 'OPTIONS') return route.fulfill({ status: 204, headers: cors });
+    // Rete assente per i dati: la richiesta fallisce come in treno o in galleria.
+    if (down && u.pathname.startsWith('/rest/')) return route.abort('internetdisconnected');
+    if (u.pathname.startsWith('/rest/v1/entries') && r.method() !== 'GET') writes.push(r.method());
     if (u.pathname === '/auth/v1/token') {
       const body = r.postDataJSON();
       if (body.password !== 'giusta') return json({ error_code: 'invalid_credentials', msg: 'Invalid login credentials' }, 400);
       return json({ access_token: 'x.eyJleHAiOjk5OTk5OTk5OTl9.y', token_type: 'bearer', expires_in: 3600, expires_at: 9999999999, refresh_token: 'r', user });
     }
-    if (u.pathname === '/rest/v1/entries' && r.method() === 'GET') return json([]);
+    const asRow = e => ({ ...e, hours: String(e.hours), created_at: 'now' });
+    if (u.pathname === '/rest/v1/entries' && r.method() === 'GET') return json(inserted.map(asRow));
     if (u.pathname === '/rest/v1/projects') return json([{ id: 'shueco', name: 'Shüco', color: 'c1', archived_at: null, created_at: '2026-01-01T00:00:00Z' }]);
     if (u.pathname === '/rest/v1/task_hours') return json(inserted.map(e => ({ who: e.who, code: e.code, done_at: null, hours: String(e.hours), last_day: e.day })));
     if (u.pathname === '/rest/v1/entries' && r.method() === 'POST') {
-      const row = r.postDataJSON(); inserted.push(row);
-      return json({ id: 'id1', ...row, hours: String(row.hours), created_at: 'now' }, 201);
+      const body = r.postDataJSON(), rows = Array.isArray(body) ? body : [body];
+      if (rows.some(x => inserted.some(e => e.id === x.id))) return json({ code: '23505', message: 'duplicate key value' }, 409);
+      inserted.push(...rows);
+      const single = /vnd\.pgrst\.object/.test(r.headers()['accept'] || '');
+      return json(single ? asRow(rows[0]) : rows.map(asRow), 201);
     }
     if (u.pathname === '/rest/v1/reminder_settings') return r.method() === 'GET' ? json({ times: ['13:00'] }) : json(null, 201);
     return json({}, 404);
@@ -304,11 +313,53 @@ const s2 = await serve('dist-remote', 4302);
   await p.waitForSelector('.entry');
   assert.equal(await p.locator('input[name=task]:checked').inputValue(), 'TASK0048231');
   assert.equal(inserted.length, 1);
-  assert.deepEqual(inserted[0], { day: '2026-11-04', who: 'shueco', hours: 2.5, code: 'TASK0048231', description: '' });
+  const { id: firstId, ...first } = inserted[0];
+  assert.match(firstId, /^[0-9a-f-]{36}$/);
+  assert.deepEqual(first, { day: '2026-11-04', who: 'shueco', hours: 2.5, code: 'TASK0048231', description: '' });
   assert.match(await p.textContent('.hrs'), /2,5 h/);
   await p.reload();
   await p.waitForSelector('#entry-form');
   assert.equal(await p.locator('#login-form').count(), 0);
+  assert.equal(await p.locator('#sync').isHidden(), true);
+
+  // Senza rete: le ore restano sul dispositivo e partono quando torna la connessione
+  down = true;
+  writes.length = 0;
+  const state = () => p.textContent('.state');
+  await p.fill('#f-hours', '3'); await p.click('#save');
+  await p.waitForFunction(() => /5,5 di 8 h/.test(document.querySelector('.state').textContent));
+  assert.match(await p.textContent('#toast'), /appena torna la connessione/);
+  assert.match(await p.textContent('#sync'), /1 modifica da inviare/);
+  await p.click('[id^=edit-] >> nth=-1');
+  await p.fill('#f-hours', '4'); await p.click('#save');
+  await p.waitForFunction(() => /6,5 di 8 h/.test(document.querySelector('.state').textContent));
+  await p.fill('#f-hours', '1'); await p.click('#save');
+  // Aspetta la lista aggiornata, non solo l'indicatore: la coda si aggiorna un attimo prima.
+  await p.waitForFunction(() => /7,5 di 8 h/.test(document.querySelector('.state').textContent));
+  assert.match(await p.textContent('#sync'), /2 modifiche da inviare/);
+  await p.screenshot({ path: `${OUT}/offline.png`, fullPage: true });
+  await p.click('[id^=remove-] >> nth=-1');
+  await p.waitForFunction(() => /6,5 di 8 h/.test(document.querySelector('.state').textContent));
+  assert.match(await p.textContent('#sync'), /1 modifica da inviare/);
+
+  // Riaperta senza rete mostra la copia locale più le modifiche in coda
+  await p.reload();
+  await p.waitForSelector('.entry');
+  assert.equal(await p.locator('.entry').count(), 2);
+  assert.match(await state(), /6,5 di 8 h/);
+  assert.match(await p.textContent('#sync'), /1 modifica da inviare/);
+  assert.equal(inserted.length, 1);
+
+  // Torna la rete: parte una sola voce, già con le correzioni fatte offline
+  down = false;
+  await p.evaluate(() => window.dispatchEvent(new Event('online')));
+  await p.waitForFunction(() => document.getElementById('sync').hidden);
+  assert.equal(inserted.length, 2);
+  assert.deepEqual({ ...inserted[1], id: 'x' }, { id: 'x', day: '2026-11-04', who: 'shueco', hours: 4, code: 'TASK0048231', description: '' });
+  assert.deepEqual(writes, ['POST']);
+  await p.reload();
+  await p.waitForSelector('.entry');
+  assert.match(await state(), /6,5 di 8 h/);
 }
 process.kill(-s2.pid);
 await b.close();
