@@ -2,7 +2,9 @@
 import {
   ABSENCES, DEFAULT_DAY_HOURS, colorVar, findCopySource, key, addDays, monday, weekDays, fmt, isWeekend, holidayName, monthBounds, targetFor
 } from './logic.js';
-import { store } from './store.js';
+import { store, isNetworkError } from './store.js';
+import { overlay, overlayTasks } from './outbox.js';
+import { pendingOps } from './sync.js';
 
 export const today = () => key(new Date());
 // Valore provvisorio: nel weekend startApp sceglie il giorno quando i dati sono caricati.
@@ -78,13 +80,20 @@ export const around = d => [...weekDays(addDays(monday(d), -7)), ...weekDays(mon
 export function pickDay(d) {
   S.selected = d; S.week = monday(d); S.editing = null; S.forceOpen = false; S.errors = {}; S.draft = freshDraft();
 }
-export async function refreshTasks() { S.tasks = await store.listTasks(); }
+// Le task del server (o della copia locale) più quelle create dalle voci ancora in coda.
+let taskBase = [];
+export async function refreshTasks() {
+  try { taskBase = await store.listTasks(); }
+  catch (err) { if (!isNetworkError(err)) throw err; }
+  S.tasks = overlayTasks(taskBase, pendingOps());
+}
 export async function refreshProjects() { S.projects = await store.listProjects(); }
 export async function ensure(days) {
   const months = [...new Set(days.map(d => d.slice(0, 7)))].filter(m => !S.loaded.has(m));
   await Promise.all(months.map(async m => {
     const { from, to } = monthBounds(m);
-    const rows = await store.listEntries(from, to);
+    // Le modifiche ancora in coda si vedono subito, anche dopo un riavvio senza rete.
+    const rows = overlay(await store.listEntries(from, to), pendingOps()).filter(e => e.day >= from && e.day <= to);
     S.entries = S.entries.filter(e => e.day.slice(0, 7) !== m).concat(rows);
     S.loaded.add(m);
   }));

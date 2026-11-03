@@ -13,8 +13,9 @@ import { isAbsence, isWeekend, monday, monthDays } from './logic.js';
 import { store } from './store.js';
 import { pushStatus, syncPush } from './push.js';
 import { S, today, freshDraft, startDay, around, pickDay, ensure, refreshTasks, refreshProjects } from './state.js';
-import { loadFail } from './ui.js';
-import { render, renderShell, renderLogin, renderPanels } from './render.js';
+import { loadFail, toast } from './ui.js';
+import { render, renderShell, renderLogin, renderPanels, renderSync } from './render.js';
+import { onSync, flushNow, pendingCount } from './sync.js';
 import { checkUpdate, actions as updateActions } from './update.js';
 import * as day from './views/day.js';
 import * as tasks from './views/tasks.js';
@@ -32,7 +33,14 @@ const actions = {
     } catch { loadFail(); }
     render();
   },
-  logout: async () => { await navigator.clearAppBadge?.().catch(() => {}); await store.signOut(); location.reload(); }
+  logout: async () => {
+    const n = pendingCount();
+    if (n && !confirm(`Hai ${n === 1 ? '1 modifica' : n + ' modifiche'} non ancora inviate: uscendo le perdi. Uscire comunque?`)) return;
+    if (n) localStorage.removeItem('monte-ore-outbox');
+    await navigator.clearAppBadge?.().catch(() => {});
+    await store.signOut();
+    location.reload();
+  }
 };
 const submits = {
   ...day.onSubmit, ...tasks.onSubmit,
@@ -60,18 +68,30 @@ document.addEventListener('submit', async ev => {
   ev.preventDefault();
   await submits[ev.target.id]?.();
 });
-// Tornando sull'app ricarica i dati, così vedi ciò che hai inserito da un altro dispositivo.
-document.addEventListener('visibilitychange', async () => {
-  if (document.visibilityState !== 'visible' || !document.getElementById('app')) return;
-  if (today() !== S.lastSeenDay) { S.lastSeenDay = today(); if (S.editing === null) pickDay(startDay()); }
+// Ricarica i dati dal server (o dalla copia locale), così vedi anche ciò che hai inserito da un altro dispositivo.
+async function reload() {
   S.loaded = new Set();
   try {
     await ensure([...around(S.week), ...monthDays(today().slice(0, 7)), ...(S.view === 'month' ? monthDays(S.month) : [])]);
     await Promise.all([refreshTasks(), refreshProjects()]);
     render();
   } catch { /* resta sui dati già mostrati */ }
+}
+document.addEventListener('visibilitychange', async () => {
+  if (document.visibilityState !== 'visible' || !document.getElementById('app')) return;
+  if (today() !== S.lastSeenDay) { S.lastSeenDay = today(); if (S.editing === null) pickDay(startDay()); }
+  await flushNow();
+  await reload();
   checkUpdate().catch(() => {});
 });
+// Coda offline: aggiorna l'indicatore, ricarica dopo un invio, avvisa se il server rifiuta qualcosa.
+onSync({
+  change: renderSync,
+  synced: () => { if (document.getElementById('app')) reload(); },
+  failed: n => toast(`${n === 1 ? 'Una modifica non è stata salvata' : n + ' modifiche non sono state salvate'}: il server l'ha rifiutata perché non più valida. Controlla le ore.`)
+});
+window.addEventListener('online', renderSync);
+window.addEventListener('offline', renderSync);
 
 async function startApp() {
   renderShell();
@@ -87,6 +107,8 @@ async function startApp() {
   S.draft = freshDraft();
   render();
   renderPanels();
+  renderSync();
+  flushNow();
   checkUpdate().catch(() => {});
   S.push = await pushStatus().catch(() => 'unavailable');
   renderPanels();

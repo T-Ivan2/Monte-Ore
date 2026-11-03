@@ -7,6 +7,7 @@ import { renderTasks } from './views/tasks.js';
 import { renderMonth } from './views/month.js';
 import { renderHours, renderNotif } from './views/panels.js';
 import { updateBadge } from './badge.js';
+import { pendingCount } from './sync.js';
 
 const root = document.getElementById('root');
 
@@ -38,6 +39,7 @@ export function renderShell() {
       <button role="tab" id="tab-tasks" data-act="view" data-view="tasks">Task</button>
       <button role="tab" id="tab-month" data-act="view" data-view="month">Mese</button>
     </div>
+    <p class="syncbar" id="sync" role="status" hidden></p>
     <main id="app" class="app"></main>
     <div class="foot">
       ${isLocal ? '<span>Modalità locale: i dati restano in questo browser.</span>' : '<button class="link" data-act="logout" id="logout">Esci</button>'}
@@ -52,3 +54,16 @@ export function render() {
   updateBadge();
 }
 export function renderPanels() { renderHours(); renderNotif(); }
+
+// Stato della connessione e delle modifiche in coda, sotto le schede.
+export function renderSync() {
+  const el = document.getElementById('sync');
+  if (!el) return;
+  const n = pendingCount(), offline = navigator.onLine === false;
+  const queued = n === 1 ? '1 modifica da inviare' : `${n} modifiche da inviare`;
+  el.hidden = !n && !offline;
+  el.className = `syncbar${offline ? ' off' : ''}`;
+  el.textContent = offline
+    ? `Sei offline${n ? ` · ${queued}` : ''}. Le ore che registri restano su questo dispositivo e partono appena torna la connessione.`
+    : `${queued}: le invio appena il server risponde.`;
+}
