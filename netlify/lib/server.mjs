@@ -26,3 +26,29 @@ export async function sendToUser(db, userId, payload) {
   if (sent === 0 && temporary > 0) throw new Error(`push failed on ${temporary} device(s)`);
   return sent;
 }
+
+// Dati per le azioni rapide di un utente: voci della settimana prima, task, progetti e ore previste.
+export async function loadQuickContext(db, userId, day) {
+  const from = new Date(`${day}T12:00:00Z`);
+  from.setUTCDate(from.getUTCDate() - 7);
+  const [entries, tasks, projects, settings] = await Promise.all([
+    db.from('entries').select('day, who, hours, code, description, created_at').eq('user_id', userId)
+      .gte('day', from.toISOString().slice(0, 10)).lte('day', day),
+    db.from('tasks').select('who, code, done_at').eq('user_id', userId),
+    db.from('projects').select('id, name, archived_at').eq('user_id', userId),
+    db.from('reminder_settings').select('day_hours').eq('user_id', userId).maybeSingle()
+  ]);
+  for (const r of [entries, tasks, projects, settings]) if (r.error) throw r.error;
+  return {
+    entries: entries.data.map(e => ({ ...e, hours: Number(e.hours) })),
+    tasks: tasks.data,
+    projects: projects.data,
+    dayHours: settings.data?.day_hours?.map(Number)
+  };
+}
+
+// Con la chiave di servizio auth.uid() è vuoto: l'utente va indicato esplicitamente.
+export async function insertEntries(db, userId, rows) {
+  const { error } = await db.from('entries').insert(rows.map(r => ({ ...r, user_id: userId })));
+  if (error) throw error;
+}

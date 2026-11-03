@@ -1,6 +1,6 @@
 // Stato dell'app e calcoli che ne derivano. Le viste leggono e modificano S, poi chiamano render().
 import {
-  ABSENCES, DEFAULT_DAY_HOURS, colorVar, key, addDays, monday, weekDays, fmt, isWeekend, holidayName, monthBounds, targetFor
+  ABSENCES, DEFAULT_DAY_HOURS, colorVar, findCopySource, key, addDays, monday, weekDays, fmt, isWeekend, holidayName, monthBounds, targetFor
 } from './logic.js';
 import { store } from './store.js';
 
@@ -63,18 +63,7 @@ export function freshDraft(kind = 'project') {
   return { kind, who: id, ...taskChoice(id), hours: fmt(rest(S.selected) || 1), desc: '' };
 }
 
-// Non copia le voci su task terminate: copiarle le riaprirebbe.
-const copyable = d => dayEntries(d).filter(e => !e.code || S.tasks.some(t => t.who === e.who && t.code === e.code && !t.done_at));
-// Ultimo giorno con voci nei 7 precedenti, da proporre come copia per un giorno vuoto.
-export function copySource(d) {
-  for (let i = 1; i <= 7; i++) {
-    const src = addDays(d, -i);
-    const rows = copyable(src);
-    if (rows.length) return { day: src, rows, skipped: dayEntries(src).length - rows.length };
-    if (dayEntries(src).length) return null;
-  }
-  return null;
-}
+export const copySource = d => findCopySource(d, S.entries, S.tasks);
 
 // Il sabato e la domenica si aprono sul venerdì se è incompleto, altrimenti sul lunedì successivo.
 export const startDay = () => {

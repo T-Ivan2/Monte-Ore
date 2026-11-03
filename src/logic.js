@@ -141,3 +141,37 @@ export function dueTimes(times, now, windowMin = 5) {
 export function reminderBody(missing) {
   return `Oggi mancano ${fmt(missing)} h da inserire.`;
 }
+
+/* AZIONI RAPIDE: le stesse regole valgono nell'app e nei pulsanti delle notifiche. */
+const taskIsOpen = (tasks, e) => !e.code || tasks.some(t => t.who === e.who && t.code === e.code && !t.done_at);
+// Ultimo giorno con voci nei 7 precedenti. Le voci su task terminate non si copiano: le riaprirebbero.
+export function findCopySource(day, entries, tasks) {
+  for (let i = 1; i <= 7; i++) {
+    const src = addDays(day, -i);
+    const all = entries.filter(e => e.day === src);
+    const rows = all.filter(e => taskIsOpen(tasks, e));
+    if (rows.length) return { day: src, rows, skipped: all.length - rows.length };
+    if (all.length) return null;
+  }
+  return null;
+}
+// Task dell'ultima voce di progetto registrata, se è ancora aperta e il suo progetto è attivo.
+export function lastOpenTask(entries, tasks, projects) {
+  const active = id => projects.some(p => p.id === id && !p.archived_at);
+  const recent = entries.filter(e => e.code)
+    .sort((a, b) => b.day.localeCompare(a.day) || String(b.created_at ?? '').localeCompare(String(a.created_at ?? '')));
+  const e = recent.find(x => taskIsOpen(tasks, x) && active(x.who));
+  return e ? { who: e.who, code: e.code } : null;
+}
+const shortDay = k => { const d = parse(k); return `${DOW[(d.getDay() + 6) % 7].slice(0, 3).toLowerCase()} ${d.getDate()}`; };
+// Al massimo due pulsanti per il promemoria di un giorno a cui mancano ore.
+export function planQuickActions({ day, missing, entries, tasks, projects }) {
+  const out = [];
+  if (!entries.some(e => e.day === day)) {
+    const src = findCopySource(day, entries, tasks);
+    if (src) out.push({ kind: 'copy', title: `Copia da ${shortDay(src.day)} · ${fmt(src.rows.reduce((n, e) => n + e.hours, 0))} h` });
+  }
+  const task = missing > 0 ? lastOpenTask(entries.filter(e => e.day <= day), tasks, projects) : null;
+  if (task) out.push({ kind: 'fill', ...task, title: `+${fmt(missing)} h su ${task.code}` });
+  return out.slice(0, 2);
+}

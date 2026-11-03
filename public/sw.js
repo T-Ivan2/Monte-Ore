@@ -28,19 +28,42 @@ self.addEventListener('fetch', e => {
   })());
 });
 
+const ICON = '/icons/icon-192.png';
+
+// Il promemoria può avere fino a due pulsanti, ognuno con un token firmato dal server.
 self.addEventListener('push', e => {
   const data = e.data ? e.data.json() : {};
+  const actions = Array.isArray(data.actions) ? data.actions.slice(0, 2) : [];
   e.waitUntil(self.registration.showNotification(data.title || 'Monte Ore', {
     body: data.body || 'Controlla le ore di oggi.',
-    icon: '/icons/icon-192.png',
-    badge: '/icons/icon-192.png',
+    icon: ICON,
+    badge: ICON,
     tag: data.tag || 'monte-ore',
-    data: { url: data.url || '/' }
+    actions: actions.map(({ action, title }) => ({ action, title })),
+    data: { url: data.url || '/', tokens: Object.fromEntries(actions.map(a => [a.action, a.token])) }
   }));
 });
 
+// Registra le ore senza aprire l'app e mostra l'esito in una nuova notifica.
+async function quickLog(token) {
+  let message;
+  try {
+    const res = await fetch('/api/quick-log', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token }) });
+    message = (await res.json()).message;
+  } catch { /* rete assente o risposta non valida */ }
+  await self.registration.showNotification('Monte Ore', {
+    body: message || 'Non sono riuscito a registrare le ore. Tocca per aprire l\'app.',
+    icon: ICON,
+    badge: ICON,
+    tag: 'monte-ore-esito',
+    data: { url: '/' }
+  });
+}
+
 self.addEventListener('notificationclick', e => {
   e.notification.close();
+  const token = e.action && e.notification.data?.tokens?.[e.action];
+  if (token) { e.waitUntil(quickLog(token)); return; }
   e.waitUntil((async () => {
     const all = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
     if (all[0]) return all[0].focus();
