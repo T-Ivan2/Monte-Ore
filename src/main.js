@@ -32,7 +32,7 @@ const actions = {
     } catch { loadFail(); }
     render();
   },
-  logout: async () => { await store.signOut(); location.reload(); }
+  logout: async () => { await navigator.clearAppBadge?.().catch(() => {}); await store.signOut(); location.reload(); }
 };
 const submits = {
   ...day.onSubmit, ...tasks.onSubmit,
@@ -66,7 +66,7 @@ document.addEventListener('visibilitychange', async () => {
   if (today() !== S.lastSeenDay) { S.lastSeenDay = today(); if (S.editing === null) pickDay(startDay()); }
   S.loaded = new Set();
   try {
-    await ensure([...around(S.week), ...(S.view === 'month' ? monthDays(S.month) : [])]);
+    await ensure([...around(S.week), ...monthDays(today().slice(0, 7)), ...(S.view === 'month' ? monthDays(S.month) : [])]);
     await Promise.all([refreshTasks(), refreshProjects()]);
     render();
   } catch { /* resta sui dati già mostrati */ }
@@ -77,7 +77,8 @@ async function startApp() {
   renderShell();
   document.getElementById('app').innerHTML = '<p class="empty">Carico le ore…</p>';
   try {
-    await Promise.all([ensure(around(today())), refreshTasks(), refreshProjects()]);
+    // Il mese in corso serve intero per il contatore sull'icona.
+    await Promise.all([ensure([...around(today()), ...monthDays(today().slice(0, 7))]), refreshTasks(), refreshProjects()]);
     ({ times: S.times, dayHours: S.dayHours } = await store.getSettings());
     S.lastProject = S.entries.filter(e => !isAbsence(e.who)).at(-1)?.who ?? null;
     // Il giorno di partenza dipende dalle ore già registrate e da quelle previste.

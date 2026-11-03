@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { findCopySource, lastOpenTask, planQuickActions } from '../src/logic.js';
+import { findCopySource, lastOpenTask, planQuickActions, incompleteDays, monthDays } from '../src/logic.js';
 import { signToken, verifyToken } from '../netlify/lib/token.mjs';
 import { quickActions, runQuickLog, QUICK_TTL_MS } from '../netlify/lib/quick.mjs';
 import { runReminders } from '../netlify/lib/reminders.mjs';
@@ -102,6 +102,18 @@ describe('azioni rapide: esecuzione', () => {
   });
 });
 
+describe('contatore sull\'icona', () => {
+  it('conta i giorni lavorativi incompleti fino a oggi', () => {
+    const entries = [e('2026-11-02', 'inpeco', 8, 'T1'), e('2026-11-03', 'inpeco', 4, 'T1'), e('2026-11-07', 'inpeco', 2, 'T1')];
+    const nov = monthDays('2026-11');
+    expect(incompleteDays(nov, '2026-11-04', entries)).toEqual(['2026-11-03', '2026-11-04']);
+    expect(incompleteDays(nov, '2026-11-04', entries, [8, 4, 0, 8, 8])).toEqual([]);
+    // Weekend e festivi non contano, nemmeno con delle ore registrate.
+    expect(incompleteDays(nov, '2026-11-09', [...entries, e('2026-11-04', 'inpeco', 8, 'T1'), e('2026-11-05', 'inpeco', 8, 'T1'), e('2026-11-06', 'inpeco', 8, 'T1')])).toEqual(['2026-11-03', '2026-11-09']);
+    expect(incompleteDays(monthDays('2026-12'), '2026-12-08', [], [8, 8, 8, 8, 8])).toHaveLength(5);
+  });
+});
+
 describe('promemoria con pulsanti', () => {
   const base = sent => ({
     listSettings: async () => [{ user_id: 'u', times: ['13:00'] }],
@@ -116,10 +128,17 @@ describe('promemoria con pulsanti', () => {
     await runReminders({ ...base(sent), actionsFor: async (u, d, m) => [{ action: 'a0', title: `+${m} h`, token: 't' }] }, at13);
     expect(sent[0].actions).toEqual([{ action: 'a0', title: '+8 h', token: 't' }]);
   });
-  it('invia il promemoria anche se i pulsanti falliscono', async () => {
+  it('invia il promemoria anche se pulsanti e contatore falliscono', async () => {
     const sent = [];
-    await runReminders({ ...base(sent), actionsFor: async () => { throw new Error('db'); } }, at13);
+    const fail = async () => { throw new Error('db'); };
+    await runReminders({ ...base(sent), actionsFor: fail, badgeFor: fail }, at13);
     expect(sent).toHaveLength(1);
     expect(sent[0].actions).toEqual([]);
+    expect(sent[0].badge).toBeUndefined();
+  });
+  it('allega il numero per l\'icona', async () => {
+    const sent = [];
+    await runReminders({ ...base(sent), badgeFor: async (u, d) => (u === 'u' && d === '2026-11-04' ? 3 : -1) }, at13);
+    expect(sent[0].badge).toBe(3);
   });
 });

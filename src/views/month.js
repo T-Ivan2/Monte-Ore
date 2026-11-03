@@ -1,5 +1,5 @@
 // Vista Mese: monte ore, calendario ed export in Excel.
-import { ABSENCES, DOW, MONTHS, fmt, parse, monday, weekDays, holidayName, monthDays, shiftMonth, dayLength } from '../logic.js';
+import { ABSENCES, DOW, MONTHS, fmt, parse, monday, weekDays, holidayName, monthDays, shiftMonth, dayLength, incompleteDays } from '../logic.js';
 import { S, today, dayTotal, target, offLabel, who, names, ensure } from '../state.js';
 import { esc, dayLabel, toast, loadFail } from '../ui.js';
 import { render } from '../render.js';
@@ -17,7 +17,7 @@ export function renderMonth() {
   const due = monthTarget();
   const rowsIn = inMonth();
   const total = rowsIn.reduce((s, e) => s + e.hours, 0);
-  const late = working.filter(d => d <= t0 && dayTotal(d) < target(d)).length;
+  const late = incompleteDays(days, t0, S.entries, S.dayHours).length;
   const hoursOf = id => rowsIn.filter(e => e.who === id).reduce((s, e) => s + e.hours, 0);
   // Progetti attivi sempre; archiviati, assenze e voci di progetti eliminati solo se hanno ore nel mese.
   const ids = [...S.projects.map(p => p.id), ...ABSENCES.map(a => a.id), ...rowsIn.map(e => e.who)];

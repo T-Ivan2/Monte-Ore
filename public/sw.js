@@ -30,27 +30,38 @@ self.addEventListener('fetch', e => {
 
 const ICON = '/icons/icon-192.png';
 
+// Numero sull'icona dell'app, dove il sistema lo supporta. Zero toglie il numero.
+async function setBadge(n) {
+  const nav = self.navigator;
+  if (typeof n !== 'number' || !nav?.setAppBadge) return;
+  try { await (n > 0 ? nav.setAppBadge(n) : nav.clearAppBadge()); } catch { /* non supportato o non permesso */ }
+}
+
 // Il promemoria può avere fino a due pulsanti, ognuno con un token firmato dal server.
 self.addEventListener('push', e => {
   const data = e.data ? e.data.json() : {};
   const actions = Array.isArray(data.actions) ? data.actions.slice(0, 2) : [];
-  e.waitUntil(self.registration.showNotification(data.title || 'Monte Ore', {
-    body: data.body || 'Controlla le ore di oggi.',
-    icon: ICON,
-    badge: ICON,
-    tag: data.tag || 'monte-ore',
-    actions: actions.map(({ action, title }) => ({ action, title })),
-    data: { url: data.url || '/', tokens: Object.fromEntries(actions.map(a => [a.action, a.token])) }
-  }));
+  e.waitUntil(Promise.all([
+    self.registration.showNotification(data.title || 'Monte Ore', {
+      body: data.body || 'Controlla le ore di oggi.',
+      icon: ICON,
+      badge: ICON,
+      tag: data.tag || 'monte-ore',
+      actions: actions.map(({ action, title }) => ({ action, title })),
+      data: { url: data.url || '/', tokens: Object.fromEntries(actions.map(a => [a.action, a.token])) }
+    }),
+    setBadge(data.badge)
+  ]));
 });
 
 // Registra le ore senza aprire l'app e mostra l'esito in una nuova notifica.
 async function quickLog(token) {
-  let message;
+  let message, badge;
   try {
     const res = await fetch('/api/quick-log', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token }) });
-    message = (await res.json()).message;
+    ({ message, badge } = await res.json());
   } catch { /* rete assente o risposta non valida */ }
+  await setBadge(badge);
   await self.registration.showNotification('Monte Ore', {
     body: message || 'Non sono riuscito a registrare le ore. Tocca per aprire l\'app.',
     icon: ICON,

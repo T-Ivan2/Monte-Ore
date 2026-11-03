@@ -24,6 +24,9 @@ function from(table) {
 vi.mock('@supabase/supabase-js', () => ({ createClient: () => ({ from }) }));
 
 process.env.VAPID_PRIVATE_KEY = 'chiave-privata-di-prova';
+// Mercoledì 4 novembre 2026, ore 13 in Italia: il contatore non dipende dal giorno in cui gira il test.
+vi.useFakeTimers({ toFake: ['Date'] });
+vi.setSystemTime(new Date('2026-11-04T12:00:00Z'));
 const { default: handler } = await import('../netlify/functions/quick-log.mjs');
 const { signToken, quickSecret } = await import('../netlify/lib/token.mjs');
 
@@ -45,7 +48,8 @@ describe('/api/quick-log', () => {
   it('registra le ore per l\'utente del token', async () => {
     const res = await post({ token: token({ k: 'fill', who: 'inpeco', code: 'T1' }) });
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ ok: true, message: 'Registrate 8 h su T1 (Inpeco).' });
+    // Restano incompleti solo lunedì 2: martedì 3 ha 8 ore, mercoledì 4 è appena stato completato.
+    expect(await res.json()).toEqual({ ok: true, message: 'Registrate 8 h su T1 (Inpeco).', badge: 1 });
     expect(db.entries.filter(r => r.day === '2026-11-04' && r.user_id === U1)).toEqual([
       { user_id: U1, day: '2026-11-04', who: 'inpeco', hours: 8, code: 'T1', description: '' }
     ]);
