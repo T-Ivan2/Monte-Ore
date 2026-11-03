@@ -1,7 +1,8 @@
 import { holidayName, isWeekend, romeNow, dueTimes, reminderBody, targetFor } from '../../src/logic.js';
 
 // Decide chi avvisare. Le dipendenze sono passate da fuori per poterla testare senza rete.
-export async function runReminders({ listSettings, claim, release, hoursFor, notify }, date = new Date()) {
+// actionsFor è facoltativa: aggiunge i pulsanti al promemoria; se fallisce il promemoria parte comunque senza.
+export async function runReminders({ listSettings, claim, release, hoursFor, notify, actionsFor }, date = new Date()) {
   const { day, time } = romeNow(date);
   if (isWeekend(day) || holidayName(day)) return { sent: 0, failed: 0, skipped: 'non lavorativo' };
   let sent = 0, failed = 0;
@@ -16,7 +17,12 @@ export async function runReminders({ listSettings, claim, release, hoursFor, not
     try {
       const missing = target - await hoursFor(user_id, day);
       if (missing > 0) {
-        await notify(user_id, { title: 'Monte Ore', body: reminderBody(missing), url: '/', tag: `ore-${day}` });
+        let actions = [];
+        if (actionsFor) {
+          try { actions = await actionsFor(user_id, day, missing); }
+          catch (err) { console.error('reminder actions failed', user_id, err?.message || err); }
+        }
+        await notify(user_id, { title: 'Monte Ore', body: reminderBody(missing), url: '/', tag: `ore-${day}`, actions });
         sent += 1;
       }
     } catch (err) {

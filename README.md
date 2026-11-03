@@ -66,6 +66,17 @@ Se riesegui per errore una migrazione già applicata si ferma con un messaggio e
 
 Usa **Prova notifica** per controllare che l'invio funzioni, poi verifica che arrivi un promemoria a un orario impostato.
 
+### Pulsanti sui promemoria
+
+Su Android e sul computer (Chrome, Edge) il promemoria ha fino a due pulsanti, che registrano le ore senza aprire l'app:
+
+- **Copia da…**: se oggi non hai ancora registrato nulla, ripete le voci dell'ultimo giorno compilato, come il pulsante Copia nell'app.
+- **+N h su TASK…**: registra le ore mancanti sull'ultima task usata, se è ancora aperta e il suo progetto è attivo.
+
+Una seconda notifica conferma cosa è stato registrato. I pulsanti valgono 12 ore e il server ricontrolla tutto quando li premi: toccarli due volte, o da due dispositivi, non duplica le ore. Su iPhone le notifiche web non mostrano pulsanti: il tocco apre l'app come sempre.
+
+Ogni pulsante porta un token firmato con una chiave ricavata da `VAPID_PRIVATE_KEY`: se cambi quella chiave, i pulsanti dei promemoria già inviati smettono di funzionare.
+
 ## Regole da conoscere
 
 - **Progetti**: si gestiscono nella scheda Task: aggiungi, rinomina, cambia colore, archivia o elimina. Un progetto archiviato non si propone più quando registri le ore ma resta nei totali, nell'export e nelle task. Si può eliminare solo un progetto senza task.
@@ -90,7 +101,7 @@ Usa **Prova notifica** per controllare che l'invio funzioni, poi verifica che ar
 | `src/render.js`, `src/ui.js` | Struttura della pagina, messaggi ed elementi comuni |
 | `src/views/` | Una vista per file: giorno, task e progetti, mese, pannelli in alto |
 | `src/main.js` | Avvio e collegamento degli eventi alle azioni delle viste |
-| `netlify/` | Funzioni server: promemoria pianificati e notifica di prova |
+| `netlify/` | Funzioni server: promemoria pianificati con pulsanti, azioni rapide (`/api/quick-log`) e notifica di prova |
 | `supabase/migrations/` | Schema del database, una migrazione per file |
 
 Ogni vista esporta `actions`: il nome dell'azione corrisponde all'attributo `data-act` dei pulsanti.

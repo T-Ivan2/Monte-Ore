@@ -1,5 +1,7 @@
 import { runReminders } from '../lib/reminders.mjs';
-import { adminClient, sendToUser } from '../lib/server.mjs';
+import { adminClient, sendToUser, loadQuickContext } from '../lib/server.mjs';
+import { quickActions } from '../lib/quick.mjs';
+import { quickSecret } from '../lib/token.mjs';
 
 export default async () => {
   const db = adminClient();
@@ -24,6 +26,9 @@ export default async () => {
       const { data, error } = await db.from('entries').select('hours').eq('user_id', user_id).eq('day', day);
       if (error) throw error;
       return data.reduce((s, r) => s + Number(r.hours), 0);
+    },
+    async actionsFor(user_id, day, missing) {
+      return quickActions(await loadQuickContext(db, user_id, day), { user_id, day, missing }, quickSecret());
     },
     notify: (user_id, payload) => sendToUser(db, user_id, payload)
   });
