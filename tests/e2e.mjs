@@ -262,6 +262,30 @@ const s1 = await serve('dist', 4301);
   await p.waitForSelector('#restore-project-inpeco');
   await p.click('#restore-project-inpeco');
   await p.waitForSelector('#archive-project-inpeco');
+  // Schede da tastiera: frecce con ritorno all'inizio, Home e Fine; solo la scheda attiva riceve il Tab
+  const active = () => p.evaluate(() => [document.activeElement.id, document.querySelector('[aria-selected=true]').id, document.getElementById('app').getAttribute('aria-labelledby')]);
+  await p.focus('#tab-tasks');
+  await p.keyboard.press('ArrowRight');
+  await p.waitForSelector('.bankfig');
+  assert.deepEqual(await active(), ['tab-month', 'tab-month', 'tab-month']);
+  await p.keyboard.press('ArrowRight');
+  await p.waitForSelector('.strip');
+  assert.deepEqual(await active(), ['tab-day', 'tab-day', 'tab-day']);
+  await p.keyboard.press('End');
+  await p.waitForSelector('.bankfig');
+  await p.keyboard.press('Home');
+  await p.waitForSelector('.strip');
+  assert.deepEqual(await active(), ['tab-day', 'tab-day', 'tab-day']);
+  assert.deepEqual(await p.$$eval('[role=tab]', els => els.map(e => e.tabIndex)), [0, -1, -1]);
+
+  // Tocco su una notifica con l'app aperta: torna alla scheda Giorno su oggi
+  await p.click('#tab-month');
+  await p.click('#prev-month');
+  await p.waitForSelector('#cal-2026-10-05');
+  await p.evaluate(() => navigator.serviceWorker.dispatchEvent(new MessageEvent('message', { data: { type: 'open-today' } })));
+  await p.waitForFunction(() => /Mercoledì 4 novembre/.test(document.querySelector('.dayhead h2')?.textContent));
+  assert.equal(await p.getAttribute('#tab-day', 'aria-selected'), 'true');
+  await p.click('#tab-tasks');
   await p.screenshot({ path: `${OUT}/projects.png`, fullPage: true });
 }
 {
@@ -414,6 +438,56 @@ const s2 = await serve('dist-remote', 4302);
   const remote = JSON.parse(readFileSync(await dl.path(), 'utf8'));
   assert.deepEqual(remote.entries.map(e => e.hours).sort(), [2.5, 4]);
   assert.deepEqual(remote.settings.times, ['13:00']);
+}
+{
+  // Recupero password: richiesta del link, arrivo dal link con nuova password, link scaduto
+  const [p, c] = await page('', { viewport: { width: 420, height: 800 } });
+  const user = { id: '00000000-0000-0000-0000-000000000002', aud: 'authenticated', role: 'authenticated', email: 'a@b.it' };
+  const cors = { 'access-control-allow-origin': '*', 'access-control-allow-headers': '*', 'access-control-allow-methods': '*' };
+  const calls = [];
+  await c.route('https://fake.supabase.co/**', route => {
+    const r = route.request(), u = new URL(r.url());
+    const json = (body, status = 200) => route.fulfill({ status, headers: cors, contentType: 'application/json', body: JSON.stringify(body) });
+    if (r.method() === 'OPTIONS') return route.fulfill({ status: 204, headers: cors });
+    if (u.pathname === '/auth/v1/recover') { calls.push(['recover', r.postDataJSON().email, u.searchParams.get('redirect_to')]); return json({}); }
+    if (u.pathname === '/auth/v1/user' && r.method() === 'GET') return json(user);
+    if (u.pathname === '/auth/v1/user' && r.method() === 'PUT') { calls.push(['password', r.postDataJSON().password]); return json(user); }
+    if (u.pathname === '/rest/v1/reminder_settings') return json({ times: [] });
+    if (u.pathname.startsWith('/rest/v1/')) return json([]);
+    return json({}, 404);
+  });
+  await p.goto('http://localhost:4302/');
+  await p.click('#forgot');
+  await p.click('#send-reset');
+  assert.match(await p.textContent('.err'), /indirizzo email/);
+  await p.fill('#reset-email', 'a@b.it'); await p.click('#send-reset');
+  await p.waitForSelector('#reset-sent');
+  assert.deepEqual(calls.shift(), ['recover', 'a@b.it', 'http://localhost:4302/']);
+  await p.click('#back-to-login');
+  await p.waitForSelector('#login-form');
+
+  // Il link della mail apre una pagina nuova: cambiare solo il # non ricaricherebbe l'app.
+  await p.goto('about:blank');
+  await p.goto('http://localhost:4302/#access_token=x.eyJleHAiOjk5OTk5OTk5OTl9.y&expires_at=9999999999&expires_in=3600&refresh_token=r&token_type=bearer&type=recovery');
+  await p.waitForSelector('#password-form');
+  await p.fill('#new-password', 'corta'); await p.fill('#new-password-2', 'corta'); await p.click('#save-password');
+  assert.match(await p.textContent('.err'), /almeno 8/);
+  await p.fill('#new-password', 'nuova-password'); await p.fill('#new-password-2', 'diversa-password'); await p.click('#save-password');
+  assert.match(await p.textContent('.err'), /non coincidono/);
+  await p.fill('#new-password', 'nuova-password'); await p.fill('#new-password-2', 'nuova-password'); await p.click('#save-password');
+  await p.waitForSelector('#entry-form, #app');
+  await p.waitForFunction(() => /Password aggiornata/.test(document.getElementById('toast').textContent));
+  assert.deepEqual(calls.shift(), ['password', 'nuova-password']);
+  assert.equal(new URL(p.url()).hash, '');
+
+  await p.evaluate(() => localStorage.clear());
+  // Il link della mail apre una pagina nuova: cambiare solo il # non ricaricherebbe l'app.
+  await p.goto('about:blank');
+  await p.goto('http://localhost:4302/#error=access_denied&error_code=otp_expired&error_description=Email+link+is+invalid+or+has+expired');
+  await p.waitForSelector('#login-form');
+  assert.match(await p.textContent('.err'), /non è più valido/);
+  assert.equal(new URL(p.url()).hash, '');
+  await p.screenshot({ path: `${OUT}/login.png` });
 }
 process.kill(-s2.pid);
 await b.close();

@@ -100,10 +100,20 @@ describe('promemoria', () => {
   });
   it('calcola gli orari dovuti', () => {
     expect(dueTimes(['13:00', '17:30'], '13:00')).toEqual(['13:00']);
-    expect(dueTimes(['13:00'], '13:04')).toEqual(['13:00']);
-    expect(dueTimes(['13:00'], '13:05')).toEqual([]);
+    expect(dueTimes(['13:00'], '13:09')).toEqual(['13:00']);
+    expect(dueTimes(['13:00'], '13:10')).toEqual([]);
     expect(dueTimes(['13:00'], '12:59')).toEqual([]);
     expect(dueTimes(['9', '13:0', '25:00', '13:00'], '13:00')).toEqual(['13:00']);
+  });
+  it('con esecuzioni ogni 5 minuti, anche in ritardo, non salta nessun orario', () => {
+    const hhmm = m => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
+    for (let late = 0; late < 5; late++) {
+      const runs = [];
+      for (let m = 8 * 60 + late; m < 20 * 60; m += 5) runs.push(hhmm(m));
+      for (let t = 9 * 60; t < 19 * 60; t++) {
+        expect(runs.some(r => dueTimes([hhmm(t)], r).length), `${hhmm(t)} con ${late} minuti di ritardo`).toBe(true);
+      }
+    }
   });
   const setup = (hours) => {
     const seen = new Set(), sent = [];

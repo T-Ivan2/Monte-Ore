@@ -138,8 +138,10 @@ export function romeNow(date = new Date()) {
 }
 const minutes = t => { const [h, m] = t.split(':').map(Number); return h * 60 + m; };
 export const isTime = t => /^([01]\d|2[0-3]):[0-5]\d$/.test(t);
-// Un orario è dovuto dal suo minuto esatto per i minuti successivi, così un'esecuzione in ritardo non lo perde.
-export function dueTimes(times, now, windowMin = 5) {
+// Un orario è dovuto dal suo minuto esatto per i 10 minuti successivi. La funzione gira ogni 5 minuti:
+// la finestra doppia copre anche un'esecuzione in ritardo, e ogni orario parte comunque una sola volta.
+export const REMINDER_WINDOW_MIN = 10;
+export function dueTimes(times, now, windowMin = REMINDER_WINDOW_MIN) {
   const n = minutes(now);
   return times.filter(isTime).filter(t => { const diff = n - minutes(t); return diff >= 0 && diff < windowMin; });
 }

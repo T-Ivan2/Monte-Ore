@@ -18,7 +18,44 @@ export function renderLogin(message = '') {
       <div class="field"><label class="lbl" for="email">Email</label><input class="input" id="email" type="email" autocomplete="username" required></div>
       <div class="field"><label class="lbl" for="password">Password</label><input class="input" id="password" type="password" autocomplete="current-password" required></div>
       ${message ? `<p class="err" role="alert">${esc(message)}</p>` : ''}
-      <div class="row"><button class="btn primary" type="submit" id="login">Accedi</button></div>
+      <div class="row">
+        <button class="btn primary" type="submit" id="login">Accedi</button>
+        <span class="spacer"></span>
+        <button class="link" type="button" data-act="forgot" id="forgot">Password dimenticata?</button>
+      </div>
+    </form>
+  </div>`;
+}
+
+// Richiesta del link per scegliere una nuova password.
+export function renderReset({ message = '', sent = false } = {}) {
+  root.innerHTML = `<div class="wrap narrow">
+    <h1>Monte Ore</h1>
+    <form id="reset-form" novalidate>
+      <h3>Recupera la password</h3>
+      ${sent
+        ? '<p class="empty" role="status" id="reset-sent">Se l\'indirizzo è registrato, riceverai una mail con un link per scegliere una nuova password. Aprila da questo dispositivo.</p>'
+        : `<p class="empty">Ti mandiamo una mail con un link per scegliere una nuova password.</p>
+      <div class="field"><label class="lbl" for="reset-email">Email</label><input class="input" id="reset-email" type="email" autocomplete="username" required></div>
+      ${message ? `<p class="err" role="alert">${esc(message)}</p>` : ''}`}
+      <div class="row">
+        ${sent ? '' : '<button class="btn primary" type="submit" id="send-reset">Invia il link</button>'}
+        <button class="link" type="button" data-act="backtologin" id="back-to-login">Torna all'accesso</button>
+      </div>
+    </form>
+  </div>`;
+}
+
+// Dopo il link della mail: nuova password.
+export function renderNewPassword(message = '') {
+  root.innerHTML = `<div class="wrap narrow">
+    <h1>Monte Ore</h1>
+    <form id="password-form" novalidate>
+      <h3>Scegli una nuova password</h3>
+      <div class="field"><label class="lbl" for="new-password">Nuova password <span>(almeno 8 caratteri)</span></label><input class="input" id="new-password" type="password" autocomplete="new-password" minlength="8" required></div>
+      <div class="field"><label class="lbl" for="new-password-2">Ripetila</label><input class="input" id="new-password-2" type="password" autocomplete="new-password" required></div>
+      ${message ? `<p class="err" role="alert">${esc(message)}</p>` : ''}
+      <div class="row"><button class="btn primary" type="submit" id="save-password">Salva e accedi</button></div>
     </form>
   </div>`;
 }
@@ -35,12 +72,12 @@ export function renderShell() {
     <section class="panel" id="hours-panel" aria-label="Ore previste" hidden></section>
     <section class="panel" id="notif-panel" aria-label="Notifiche" hidden></section>
     <div class="tabs" role="tablist" aria-label="Vista">
-      <button role="tab" id="tab-day" data-act="view" data-view="day">Giorno</button>
-      <button role="tab" id="tab-tasks" data-act="view" data-view="tasks">Task</button>
-      <button role="tab" id="tab-month" data-act="view" data-view="month">Mese</button>
+      <button role="tab" id="tab-day" data-act="view" data-view="day" aria-controls="app">Giorno</button>
+      <button role="tab" id="tab-tasks" data-act="view" data-view="tasks" aria-controls="app">Task</button>
+      <button role="tab" id="tab-month" data-act="view" data-view="month" aria-controls="app">Mese</button>
     </div>
     <p class="syncbar" id="sync" role="status" hidden></p>
-    <main id="app" class="app"></main>
+    <main id="app" class="app" role="tabpanel"></main>
     <div class="foot">
       ${isLocal ? '<span>Modalità locale: i dati restano in questo browser.</span>' : '<button class="link" data-act="logout" id="logout">Esci</button>'}
       <button class="link" data-act="backup" id="backup">Scarica backup</button>
@@ -51,7 +88,13 @@ export function renderShell() {
 }
 
 export function render() {
-  for (const v of ['day', 'tasks', 'month']) document.getElementById(`tab-${v}`).setAttribute('aria-selected', S.view === v);
+  // Schede accessibili: solo quella attiva riceve il Tab, le altre si raggiungono con le frecce.
+  for (const v of ['day', 'tasks', 'month']) {
+    const tab = document.getElementById(`tab-${v}`);
+    tab.setAttribute('aria-selected', S.view === v);
+    tab.tabIndex = S.view === v ? 0 : -1;
+  }
+  document.getElementById('app').setAttribute('aria-labelledby', `tab-${S.view}`);
   if (S.view === 'month') renderMonth(); else if (S.view === 'tasks') renderTasks(); else renderDay();
   // Ogni modifica passa da qui, quindi il contatore resta sempre allineato.
   updateBadge();

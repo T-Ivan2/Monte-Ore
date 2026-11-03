@@ -24,6 +24,7 @@ Senza variabili Supabase l'app gira in modalità locale: i dati restano nel brow
 3. Apri **SQL Editor** ed esegui, uno alla volta e in ordine, i file in `supabase/migrations/`. Il tuo utente riceve i progetti di partenza, che poi puoi cambiare dall'app.
 4. In **Authentication > Sign In / Providers** disattiva **Allow new users to sign up**, così solo tu puoi accedere.
 5. Copia URL del progetto, chiave `anon` e chiave `service_role` da **Project Settings > API**.
+6. In **Authentication > URL Configuration** imposta **Site URL** con l'indirizzo del sito Netlify (per esempio `https://monte-ore.netlify.app`) e aggiungilo anche in **Redirect URLs**. Serve al link di **Password dimenticata?**: senza, la mail porta alla pagina sbagliata. Il servizio mail incluso in Supabase invia poche mail all'ora, sufficienti per un uso personale.
 
 ### 2. Chiavi delle notifiche
 
@@ -114,7 +115,7 @@ Ogni pulsante porta un token firmato con una chiave ricavata da `VAPID_PRIVATE_K
 - **Ore previste**: l'icona con l'orologio, in alto, imposta le ore da registrare da lunedì a venerdì (predefinite 8). Metti 0 nei giorni in cui non lavori.
 - Sabato, domenica e festivi non prevedono ore e non risultano mai incompleti, ma puoi registrarci ore con **Aggiungi ore**: contano nel totale del mese e nell'export.
 - I promemoria partono dal lunedì al venerdì, esclusi i festivi nazionali e i giorni a 0 ore, e solo se nella giornata mancano ore rispetto a quelle previste.
-- Se l'invio di un promemoria fallisce per un errore temporaneo, viene ritentato ogni minuto per i 5 minuti successivi all'orario.
+- La funzione dei promemoria gira ogni 5 minuti: un promemoria arriva entro qualche minuto dall'orario scelto. Se l'invio fallisce per un errore temporaneo viene ritentato al giro successivo, fino a 10 minuti dopo l'orario.
 - Il santo patrono locale non è un festivo automatico: registralo come assenza **Altro**.
 - Il codice ServiceNow è obbligatorio sui progetti, in qualsiasi formato. Una task si crea alla prima registrazione, resta selezionabile finché è aperta e, una volta terminata, resta nell'archivio con le sue ore. Registrare ore sul suo codice la riapre.
 - Su un giorno vuoto, **Copia da…** ripete le voci dell'ultimo giorno compilato nella settimana precedente. Le voci su task terminate non vengono copiate.
@@ -142,6 +143,7 @@ Ogni vista esporta `actions`: il nome dell'azione corrisponde all'attributo `dat
 ## Test
 
 ```bash
+npm run lint      # controllo del codice con ESLint
 npm test          # regole, promemoria, vincoli e sicurezza del database
 npm i --no-save playwright && npx playwright install chromium
 npm run test:e2e  # flussi completi nel browser

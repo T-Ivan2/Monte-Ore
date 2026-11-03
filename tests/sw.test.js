@@ -3,13 +3,13 @@ import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 import { describe, it, expect } from 'vitest';
 
-function loadSW(fetchImpl) {
+function loadSW(fetchImpl, windows = []) {
   const handlers = {}, shown = [], requests = [], opened = [], badges = [];
   const self = {
     navigator: { setAppBadge: async n => { badges.push(n); }, clearAppBadge: async () => { badges.push(0); } },
     addEventListener: (type, fn) => { handlers[type] = fn; },
     registration: { showNotification: async (title, opts) => { shown.push({ title, ...opts }); } },
-    clients: { matchAll: async () => [], openWindow: async url => { opened.push(url); }, claim: async () => {} },
+    clients: { matchAll: async () => windows, openWindow: async url => { opened.push(url); }, claim: async () => {} },
     skipWaiting: () => {}
   };
   const fetch = async (url, init) => { requests.push({ url, body: JSON.parse(init.body) }); return fetchImpl(); };
@@ -62,6 +62,14 @@ describe('service worker', () => {
     const sw = loadSW(async () => { throw new Error('offline'); });
     await sw.fire('notificationclick', { action: 'a0', notification: notification({ url: '/', tokens: { a0: 'tok0' } }) });
     expect(sw.shown[0].body).toMatch(/Non sono riuscito/);
+  });
+  it('con l\'app già aperta la porta in primo piano sul giorno da compilare', async () => {
+    const calls = [];
+    const win = { postMessage: m => calls.push(['message', m]), focus: async () => calls.push(['focus']) };
+    const sw = loadSW(undefined, [win]);
+    await sw.fire('notificationclick', { action: '', notification: notification({ url: '/', tokens: {} }) });
+    expect(calls).toEqual([['message', { type: 'open-today' }], ['focus']]);
+    expect(sw.opened).toEqual([]);
   });
   it('apre l\'app quando si tocca la notifica', async () => {
     const sw = loadSW();
