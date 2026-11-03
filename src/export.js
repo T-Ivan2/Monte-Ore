@@ -6,7 +6,8 @@ const excelDate = k => { const [y, m, d] = k.split('-').map(Number); return new 
 const WEEKDAYS = ['Domenica', 'Lunedì', 'Martedì', 'Mercoledì', 'Giovedì', 'Venerdì', 'Sabato'];
 
 // Prepara i fogli del file: dettaglio delle voci e riepilogo del mese.
-export function buildSheets(entries, target) {
+// dayLen sono le ore di una giornata, usate per convertire le ore in giornate.
+export function buildSheets(entries, target, dayLen = TARGET) {
   const sorted = [...entries].sort((a, b) => a.day.localeCompare(b.day) || WHO[a.who].name.localeCompare(WHO[b.who].name, 'it'));
   const total = sorted.reduce((s, e) => s + e.hours, 0);
   const detail = [
@@ -30,10 +31,10 @@ export function buildSheets(entries, target) {
     ...whoRows.map(r => [
       { value: WHO[r.id].name, type: String },
       { value: r.h, type: Number, format: '0.0' },
-      { value: r.h / TARGET, type: Number, format: '0.00' }
+      { value: r.h / dayLen, type: Number, format: '0.00' }
     ]),
-    [{ value: 'Totale', fontWeight: 'bold' }, { value: total, type: Number, format: '0.0', fontWeight: 'bold' }, { value: total / TARGET, type: Number, format: '0.00', fontWeight: 'bold' }],
-    [{ value: 'Ore previste', type: String }, { value: target, type: Number, format: '0.0' }, { value: target / TARGET, type: Number, format: '0.00' }],
+    [{ value: 'Totale', fontWeight: 'bold' }, { value: total, type: Number, format: '0.0', fontWeight: 'bold' }, { value: total / dayLen, type: Number, format: '0.00', fontWeight: 'bold' }],
+    [{ value: 'Ore previste', type: String }, { value: target, type: Number, format: '0.0' }, { value: target / dayLen, type: Number, format: '0.00' }],
     [null, null, null],
     [head('Task'), head('Ore'), head('Progetto')],
     ...taskKeys.map(k => {
@@ -51,9 +52,9 @@ export function buildSheets(entries, target) {
   ];
 }
 
-export async function exportMonth(entries, month, target) {
+export async function exportMonth(entries, month, target, dayLen) {
   const { default: writeXlsxFile } = await import('write-excel-file/browser');
-  const blob = await writeXlsxFile(buildSheets(entries, target)).toBlob();
+  const blob = await writeXlsxFile(buildSheets(entries, target, dayLen)).toBlob();
   const name = `monte-ore-${month}.xlsx`;
   const file = new File([blob], name, { type: blob.type || 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
   // Sul telefono apre il menu di condivisione: Salva su File, Mail, WhatsApp e così via.

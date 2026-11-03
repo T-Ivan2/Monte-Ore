@@ -1,5 +1,8 @@
 // Regole pure, condivise da app e funzioni server.
+// Giornata standard: è il valore predefinito delle ore previste e l'unità delle "giornate" nell'export.
 export const TARGET = 8;
+// Ore previste da lunedì a venerdì. Sabato, domenica e festivi non ne prevedono.
+export const DEFAULT_DAY_HOURS = [8, 8, 8, 8, 8];
 export const PROJECTS = [
   { id: 'shueco', name: 'Shüco', color: 'var(--c-shueco)' },
   { id: 'inpeco', name: 'Inpeco', color: 'var(--c-inpeco)' },
@@ -11,7 +14,7 @@ export const ABSENCES = [
   { id: 'altro', name: 'Altra assenza', color: 'var(--c-off)' }
 ];
 export const WHO = Object.fromEntries([...PROJECTS, ...ABSENCES].map(w => [w.id, w]));
-export const DOW = ['Lunedì', 'Martedì', 'Mercoledì', 'Giovedì', 'Venerdì'];
+export const DOW = ['Lunedì', 'Martedì', 'Mercoledì', 'Giovedì', 'Venerdì', 'Sabato', 'Domenica'];
 export const MONTHS = ['gennaio', 'febbraio', 'marzo', 'aprile', 'maggio', 'giugno', 'luglio', 'agosto', 'settembre', 'ottobre', 'novembre', 'dicembre'];
 export const normalizeCode = raw => String(raw).replace(/\s+/g, '').toUpperCase();
 
@@ -20,17 +23,15 @@ export const key = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.get
 export const parse = k => { const [y, m, d] = k.split('-').map(Number); return new Date(y, m - 1, d); };
 export const addDays = (k, n) => { const d = parse(k); d.setDate(d.getDate() + n); return key(d); };
 export const monday = k => addDays(k, -((parse(k).getDay() + 6) % 7));
-export const weekDays = mon => [0, 1, 2, 3, 4].map(i => addDays(mon, i));
+export const weekDays = mon => [0, 1, 2, 3, 4, 5, 6].map(i => addDays(mon, i));
 export const fmt = n => Number.isInteger(n) ? String(n) : n.toFixed(1).replace('.', ',');
 export const isAbsence = id => ABSENCES.some(a => a.id === id);
 export const isWeekend = k => { const d = parse(k).getDay(); return d === 0 || d === 6; };
 
-export function monthWeekdays(ym) {
+export function monthDays(ym) {
   const [y, m] = ym.split('-').map(Number);
   const days = [];
-  for (let d = new Date(y, m - 1, 1); d.getMonth() === m - 1; d.setDate(d.getDate() + 1)) {
-    if (d.getDay() >= 1 && d.getDay() <= 5) days.push(key(d));
-  }
+  for (let d = new Date(y, m - 1, 1); d.getMonth() === m - 1; d.setDate(d.getDate() + 1)) days.push(key(d));
   return days;
 }
 export function monthBounds(ym) {
@@ -61,6 +62,20 @@ export function holidayName(k) {
   return k === easterMonday(y) ? 'Pasquetta' : null;
 }
 
+// Ore da registrare in un giorno: zero nel weekend, nei festivi e nei giorni impostati a zero.
+export function targetFor(k, dayHours = DEFAULT_DAY_HOURS) {
+  if (isWeekend(k) || holidayName(k)) return 0;
+  const h = Number(dayHours?.[(parse(k).getDay() + 6) % 7]);
+  return Number.isFinite(h) ? h : TARGET;
+}
+export const isHalfHours = h => Number.isFinite(h) && h >= 0 && h <= 24 && (h * 2) % 1 === 0;
+export const validDayHours = arr => Array.isArray(arr) && arr.length === 5 && arr.every(isHalfHours);
+// Ore medie di una giornata lavorata, per convertire le ore in giornate.
+export const dayLength = dayHours => {
+  const on = (validDayHours(dayHours) ? dayHours : DEFAULT_DAY_HOURS).filter(h => h > 0);
+  return on.length ? on.reduce((s, h) => s + h, 0) / on.length : TARGET;
+};
+
 export function parseHours(raw) {
   const n = Number(String(raw).trim().replace(',', '.'));
   return Number.isFinite(n) ? n : NaN;
@@ -89,10 +104,11 @@ export function romeNow(date = new Date()) {
   return { day: `${p.year}-${p.month}-${p.day}`, time: `${p.hour}:${p.minute}` };
 }
 const minutes = t => { const [h, m] = t.split(':').map(Number); return h * 60 + m; };
+export const isTime = t => /^([01]\d|2[0-3]):[0-5]\d$/.test(t);
 // Un orario è dovuto dal suo minuto esatto per i minuti successivi, così un'esecuzione in ritardo non lo perde.
 export function dueTimes(times, now, windowMin = 5) {
   const n = minutes(now);
-  return times.filter(t => { const diff = n - minutes(t); return diff >= 0 && diff < windowMin; });
+  return times.filter(isTime).filter(t => { const diff = n - minutes(t); return diff >= 0 && diff < windowMin; });
 }
 export function reminderBody(missing) {
   return `Oggi mancano ${fmt(missing)} h da inserire.`;

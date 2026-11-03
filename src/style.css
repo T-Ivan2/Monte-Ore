@@ -28,7 +28,7 @@ button { cursor: pointer; }
 :focus-visible { outline: 2px solid var(--c-shueco); outline-offset: 2px; }
 .wrap { max-width: 620px; margin: 0 auto; padding-block: 20px 72px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); display: grid; gap: 20px; }
 header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-h1 { margin: 0; font: 700 22px/1.1 var(--font-display); letter-spacing: -.01em; }
+h1 { margin: 0; font: 700 22px/1.1 var(--font-display); letter-spacing: -.01em; white-space: nowrap; }
 .quiet { background: none; border: 1px solid var(--line); border-radius: 6px; padding: 7px 11px; font-size: 13px; font-weight: 500; display: inline-flex; align-items: center; gap: 7px; }
 .quiet:hover { border-color: var(--muted); }
 .quiet svg { width: 15px; height: 15px; flex: none; }
@@ -48,11 +48,12 @@ h1 { margin: 0; font: 700 22px/1.1 var(--font-display); letter-spacing: -.01em; 
 .icon:hover { background: var(--soft); }
 .link { background: none; border: 0; padding: 4px 0; font-size: 13px; color: var(--muted); text-decoration: underline; text-underline-offset: 3px; }
 .spacer { flex: 1; }
-.strip { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; }
+.strip { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 5px; }
 .strip button { min-width: 0; border: 1px solid var(--line); background: var(--surface); border-radius: 8px; padding: 8px 2px; font-size: 12px; color: var(--muted); line-height: 1.3; }
 .strip b { display: block; font: 600 16px var(--font-data); color: var(--ink); margin-top: 2px; font-variant-numeric: tabular-nums; }
 .strip .done b { color: var(--ok); }
 .strip .lack b { color: var(--warn); }
+.strip .off:not(.sel) { background: var(--soft); }
 .strip .sel { background: var(--primary); border-color: var(--primary); color: var(--on-primary); }
 .strip .sel b { color: var(--on-primary); }
 .dayhead { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 2px 12px; }
@@ -112,16 +113,16 @@ textarea { height: 66px; resize: vertical; }
 .bar i { display: block; height: 100%; }
 .legend { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 13px; color: var(--muted); }
 .legend b { font: 500 13px var(--font-data); color: var(--ink); }
-.cal { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; }
+.cal { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 5px; }
 .cal .dow { font-size: 12px; font-weight: 600; color: var(--muted); text-align: center; }
-.calday { min-width: 0; min-height: 62px; display: flex; flex-direction: column; justify-content: space-between; gap: 2px; padding: 6px 8px; text-align: left; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; }
+.calday { min-width: 0; min-height: 62px; display: flex; flex-direction: column; justify-content: space-between; gap: 2px; padding: 6px; text-align: left; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; }
 .calday:hover { border-color: var(--muted); }
 .calday .n { font-size: 12px; color: var(--muted); }
 .calday .t { font: 600 16px var(--font-data); font-variant-numeric: tabular-nums; }
 .calday.done .t { color: var(--ok); }
 .calday.lack .t { color: var(--warn); }
 .calday.future .t { color: var(--muted); font-weight: 400; }
-.calday.holiday { background: var(--soft); }
+.calday.off, .calday.holiday { background: var(--soft); }
 .calday.holiday .t { font: 500 12px var(--font-body); color: var(--muted); }
 .calday.today { border-color: var(--ink); box-shadow: inset 0 0 0 1px var(--ink); }
 .foot { font-size: 12px; color: var(--muted); display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: center; }
@@ -150,3 +151,11 @@ body { margin: 0; padding-top: env(safe-area-inset-top, 0px); padding-bottom: en
 .chipbtn { padding: 8px 12px; border: 1px dashed var(--muted); border-radius: 6px; background: none; font-weight: 500; }
 .code.strong { color: var(--ink); font-size: 14px; font-weight: 600; }
 .who.sub { grid-column: 1 / -1; font-weight: 400; font-size: 13px; color: var(--muted); }
+header .row { gap: 6px; justify-content: flex-end; }
+.dayhours { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; }
+.dayhours .input { text-align: center; padding-inline: 2px; font-family: var(--font-data); font-weight: 500; }
+@media (max-width: 479px) {
+  .quiet .wide { display: none; }
+  .strip button { font-size: 11px; }
+  .calday .t { font-size: 14px; }
+}

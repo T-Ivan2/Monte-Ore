@@ -13,6 +13,8 @@ self.addEventListener('activate', e => {
 self.addEventListener('fetch', e => {
   const url = new URL(e.request.url);
   if (e.request.method !== 'GET' || url.origin !== location.origin || url.pathname.startsWith('/api/')) return;
+  // Il controllo della nuova versione chiede la pagina pubblicata, non la copia salvata.
+  if (e.request.cache === 'no-store') return;
   e.respondWith((async () => {
     const cache = await caches.open(CACHE);
     const lookup = e.request.mode === 'navigate' ? '/' : e.request;

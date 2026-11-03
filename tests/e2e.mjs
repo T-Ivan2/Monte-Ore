@@ -2,22 +2,39 @@
 import { createRequire } from 'node:module';
 import { spawn, execSync } from 'node:child_process';
 import assert from 'node:assert';
+import { readFileSync } from 'node:fs';
 const require = createRequire(process.env.PLAYWRIGHT_FROM || import.meta.url);
 const { chromium } = require('playwright');
 const OUT = process.env.SHOTS || '.';
 const NOW = new Date('2026-11-04T10:00:00+01:00');
 
-function serve(dir, port) {
+async function serve(dir, port) {
+  const busy = await fetch(`http://localhost:${port}/`).then(() => true, () => false);
+  if (busy) throw new Error(`la porta ${port} è già occupata, forse da un test precedente rimasto aperto`);
   const p = spawn('npx', ['vite', 'preview', '--outDir', dir, '--port', String(port), '--strictPort'], { stdio: 'ignore', detached: true });
-  return new Promise(r => setTimeout(() => r(p), 1500));
+  // Aspetta che il server risponda invece di un tempo fisso, che sulle macchine lente non basta.
+  return (async () => {
+    for (let i = 0; i < 100; i++) {
+      if (p.exitCode !== null) throw new Error(`il server sulla porta ${port} non è partito`);
+      try { await fetch(`http://localhost:${port}/`); return p; } catch { await new Promise(r => setTimeout(r, 200)); }
+    }
+    throw new Error(`il server sulla porta ${port} non risponde`);
+  })();
 }
 const b = await chromium.launch();
 const errs = [];
+// Applica la stessa Content-Security-Policy di Netlify, così una violazione fa fallire il test.
+const CSP = readFileSync('netlify.toml', 'utf8').match(/Content-Security-Policy = "([^"]+)"/)[1];
 async function page(url, opts) {
   const c = await b.newContext({ serviceWorkers: 'block', ...opts });
+  await c.route('http://localhost:*/**', async route => {
+    const res = await route.fetch();
+    route.fulfill({ response: res, headers: { ...res.headers(), 'content-security-policy': CSP } });
+  });
   const p = await c.newPage();
   await p.clock.setFixedTime(NOW);
   p.on('pageerror', e => errs.push(e.message));
+  p.on('console', m => { if (/Content Security Policy/i.test(m.text())) errs.push(m.text()); });
   return [p, c, url];
 }
 
@@ -125,8 +142,61 @@ const s1 = await serve('dist', 4301);
   await p.waitForSelector('#entry-form');
   await p.fill('#f-code', 'TASK0048231'); await p.fill('#f-hours', '4'); await p.click('#save');
   await p.waitForSelector('.entry');
+  // Nessun avviso di nuova versione quando lo script pubblicato è lo stesso
+  await p.waitForTimeout(300);
+  assert.equal(await p.locator('#update').count(), 0);
+
+  // Copia le voci dell'ultimo giorno compilato, con annulla
+  await p.click('#strip-2026-11-05');
+  assert.match(await p.textContent('#copy-day'), /Copia da mercoledì 4 novembre · 4 h/);
+  await p.click('#copy-day');
+  await p.waitForFunction(() => /4 di 8 h/.test(document.querySelector('.state').textContent));
+  assert.equal(await p.locator('#copy-day').count(), 0);
+  await p.click('#undo');
+  await p.waitForFunction(() => /0 di 8 h/.test(document.querySelector('.state').textContent));
+
+  // Ore nel weekend: nessuna ora prevista, ma si possono registrare
+  await p.click('#strip-2026-11-07');
+  assert.match(await p.textContent('.state'), /Weekend/);
+  assert.equal(await p.locator('#entry-form').count(), 0);
+  assert.equal(await p.locator('#copy-day').count(), 0);
+  assert.equal(await p.textContent('#open-form'), 'Aggiungi ore');
+  await p.click('#open-form');
+  await p.fill('#f-hours', '2'); await p.click('#save');
+  await p.waitForFunction(() => /2 h · Weekend/.test(document.querySelector('.state').textContent));
+
+  // Ore previste: venerdì a 4 ore, valore non valido rifiutato
+  assert.match(await p.textContent('#hours-toggle'), /40 h/);
+  await p.click('#hours-toggle');
+  await p.fill('#dh-4', '4'); await p.press('#dh-4', 'Tab');
+  await p.waitForFunction(() => /36 h/.test(document.getElementById('hours-toggle').textContent));
+  await p.fill('#dh-0', 'tanto'); await p.press('#dh-0', 'Tab');
+  await p.waitForSelector('#e-dh');
+  assert.match(await p.textContent('#hours-toggle'), /36 h/);
+  await p.click('#strip-2026-11-06');
+  assert.match(await p.textContent('.state'), /0 di 4 h/);
+  await p.click('#hours-toggle');
   await p.screenshot({ path: `${OUT}/phone.png`, fullPage: true });
   assert.equal(await p.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
+
+  await p.click('#tab-month');
+  await p.waitForSelector('.bankfig');
+  assert.match(await p.textContent('.bankfig'), /6 di 152 h/);
+  assert.match(await p.textContent('#cal-2026-11-07'), /2/);
+  assert.match(await p.textContent('#cal-2026-11-08'), /–/);
+  await p.screenshot({ path: `${OUT}/phone-month.png`, fullPage: true });
+  assert.equal(await p.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
+
+  // Avviso di nuova versione quando lo script pubblicato cambia
+  await p.route('http://localhost:4301/', async route => {
+    if (route.request().resourceType() !== 'fetch') return route.fallback();
+    const res = await route.fetch();
+    route.fulfill({ response: res, body: (await res.text()).replace('/assets/index-', '/assets/index-nuovo') });
+  });
+  await p.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
+  await p.waitForSelector('#update');
+  assert.match(await p.textContent('#update'), /Nuova versione disponibile/);
+  await Promise.all([p.waitForEvent('load'), p.click('#reload')]);
 }
 process.kill(-s1.pid);
 
