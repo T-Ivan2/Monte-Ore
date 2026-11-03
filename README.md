@@ -142,6 +142,7 @@ Ogni vista esporta `actions`: il nome dell'azione corrisponde all'attributo `dat
 ## Test
 
 ```bash
+npm run lint      # controllo del codice con ESLint
 npm test          # regole, promemoria, vincoli e sicurezza del database
 npm i --no-save playwright && npx playwright install chromium
 npm run test:e2e  # flussi completi nel browser
