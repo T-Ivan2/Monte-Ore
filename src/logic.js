@@ -3,17 +3,23 @@
 export const TARGET = 8;
 // Ore previste da lunedì a venerdì. Sabato, domenica e festivi non ne prevedono.
 export const DEFAULT_DAY_HOURS = [8, 8, 8, 8, 8];
-export const PROJECTS = [
-  { id: 'shueco', name: 'Shüco', color: 'var(--c-shueco)' },
-  { id: 'inpeco', name: 'Inpeco', color: 'var(--c-inpeco)' },
-  { id: 'frau', name: 'Poltrona Frau', color: 'var(--c-frau)' }
+// Palette dei progetti: ogni colore ha una variante chiara e una scura in style.css (--c-1 … --c-8).
+export const COLORS = [
+  { id: 'c1', name: 'Blu' }, { id: 'c2', name: 'Verde acqua' }, { id: 'c3', name: 'Rosso' }, { id: 'c4', name: 'Viola' },
+  { id: 'c5', name: 'Arancio' }, { id: 'c6', name: 'Magenta' }, { id: 'c7', name: 'Verde' }, { id: 'c8', name: 'Azzurro' }
+];
+export const colorVar = c => COLORS.some(x => x.id === c) ? `var(--c-${c.slice(1)})` : 'var(--c-off)';
+// I progetti stanno nel database; questi sono quelli di partenza della modalità locale.
+export const DEFAULT_PROJECTS = [
+  { id: 'shueco', name: 'Shüco', color: 'c1' },
+  { id: 'inpeco', name: 'Inpeco', color: 'c2' },
+  { id: 'frau', name: 'Poltrona Frau', color: 'c3' }
 ];
 export const ABSENCES = [
   { id: 'ferie', name: 'Ferie', color: 'var(--c-off)' },
   { id: 'permesso', name: 'Permesso', color: 'var(--c-off)' },
   { id: 'altro', name: 'Altra assenza', color: 'var(--c-off)' }
 ];
-export const WHO = Object.fromEntries([...PROJECTS, ...ABSENCES].map(w => [w.id, w]));
 export const DOW = ['Lunedì', 'Martedì', 'Mercoledì', 'Giovedì', 'Venerdì', 'Sabato', 'Domenica'];
 export const MONTHS = ['gennaio', 'febbraio', 'marzo', 'aprile', 'maggio', 'giugno', 'luglio', 'agosto', 'settembre', 'ottobre', 'novembre', 'dicembre'];
 export const normalizeCode = raw => String(raw).replace(/\s+/g, '').toUpperCase();
@@ -76,6 +82,27 @@ export const dayLength = dayHours => {
   return on.length ? on.reduce((s, h) => s + h, 0) / on.length : TARGET;
 };
 
+// Identificativo stabile per un nuovo progetto, ricavato dal nome. Non cambia se il progetto viene rinominato.
+export function slugify(name, taken = []) {
+  const base = String(name).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 30) || 'progetto';
+  const used = new Set([...taken, ...ABSENCES.map(a => a.id)]);
+  let id = base;
+  for (let n = 2; used.has(id); n++) id = `${base}-${n}`;
+  return id;
+}
+export function validateProject(draft, projects = [], selfId = null) {
+  const errors = {};
+  const name = String(draft.name ?? '').trim().replace(/\s+/g, ' ');
+  const same = x => x.toLocaleLowerCase('it') === name.toLocaleLowerCase('it');
+  if (!name) errors.name = 'Inserisci il nome del progetto.';
+  else if (name.length > 40) errors.name = 'Il nome può avere al massimo 40 caratteri.';
+  else if (projects.some(p => p.id !== selfId && same(p.name))) errors.name = 'Esiste già un progetto con questo nome.';
+  else if (ABSENCES.some(a => same(a.name))) errors.name = "Questo nome è già usato da un'assenza.";
+  if (!COLORS.some(c => c.id === draft.color)) errors.color = 'Scegli un colore.';
+  return { errors, value: { name, color: draft.color } };
+}
+
 export function parseHours(raw) {
   const n = Number(String(raw).trim().replace(',', '.'));
   return Number.isFinite(n) ? n : NaN;
@@ -85,6 +112,7 @@ export function validateEntry(draft, otherHours = 0) {
   const errors = {};
   const isProject = draft.kind === 'project';
   const code = isProject ? normalizeCode(draft.code) : null;
+  if (isProject && !draft.who) errors.who = 'Aggiungi un progetto dalla scheda Task.';
   if (isProject) {
     if (!code) errors.code = draft.newTask === false ? 'Scegli una task o aggiungine una nuova.' : 'Inserisci il codice della task ServiceNow.';
     else if (code.length > 40) errors.code = 'Il codice può avere al massimo 40 caratteri.';

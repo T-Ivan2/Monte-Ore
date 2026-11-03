@@ -198,6 +198,61 @@ const s1 = await serve('dist', 4301);
   assert.match(await p.textContent('#update'), /Nuova versione disponibile/);
   await Promise.all([p.waitForEvent('load'), p.click('#reload')]);
 }
+{
+  // Progetti: aggiunta, nome duplicato, archivio, eliminazione, rinomina
+  const [p] = await page('', { viewport: { width: 1000, height: 900 }, colorScheme: 'light' });
+  await p.goto('http://localhost:4301/');
+  await p.waitForSelector('#entry-form');
+  await p.click('#tab-tasks');
+  await p.click('#add-project');
+  await p.fill('#p-name', '  Acme   <b>x</b> ');
+  await p.click('label:has(#pcolor-c4)');
+  await p.click('#p-save');
+  await p.waitForSelector('#edit-project-acme-b-x-b');
+  assert.equal(await p.locator('#projects .who b').count(), 0);
+  assert.match(await p.textContent('#projects'), /Acme <b>x<\/b>/);
+  await p.click('#add-project');
+  await p.fill('#p-name', 'SHÜCO');
+  await p.click('#p-save');
+  assert.match(await p.textContent('#e-p-name'), /Esiste già/);
+  await p.click('#p-cancel');
+
+  await p.click('#tab-day');
+  assert.equal(await p.locator('input[name=who]:checked').inputValue(), 'acme-b-x-b');
+  await p.fill('#f-code', 'ACM1'); await p.fill('#f-hours', '2'); await p.click('#save');
+  await p.waitForFunction(() => /2 di 8 h/.test(document.querySelector('.state').textContent));
+  assert.match(await p.textContent('.list'), /Acme <b>x<\/b>/);
+
+  await p.click('#tab-tasks');
+  await p.waitForSelector('#archive-project-inpeco');
+  assert.equal(await p.locator('#del-project-acme-b-x-b').count(), 0);
+  await p.click('#archive-project-inpeco');
+  await p.waitForSelector('#restore-project-inpeco');
+  await p.click('#del-project-frau');
+  await p.waitForFunction(() => !document.getElementById('edit-project-frau'));
+  await p.click('#edit-project-shueco');
+  await p.fill('#p-name', 'Schüco'); await p.click('label:has(#pcolor-c8)'); await p.click('#p-save');
+  await p.waitForFunction(() => /Schüco/.test(document.getElementById('projects').textContent));
+
+  await p.click('#tab-day');
+  assert.deepEqual(await p.locator('input[name=who]').evaluateAll(els => els.map(e => e.value)), ['shueco', 'acme-b-x-b']);
+  await p.click('#tab-month');
+  await p.waitForSelector('.legend');
+  const legend = await p.textContent('.legend');
+  assert.match(legend, /Schüco 0 h/);
+  assert.match(legend, /Acme <b>x<\/b> 2 h/);
+  assert.doesNotMatch(legend, /Inpeco|Poltrona/);
+  const [dl] = await Promise.all([p.waitForEvent('download'), p.click('#export-xlsx')]);
+  assert.equal(dl.suggestedFilename(), 'monte-ore-2026-11.xlsx');
+
+  await p.reload();
+  await p.waitForSelector('#entry-form');
+  await p.click('#tab-tasks');
+  await p.waitForSelector('#restore-project-inpeco');
+  await p.click('#restore-project-inpeco');
+  await p.waitForSelector('#archive-project-inpeco');
+  await p.screenshot({ path: `${OUT}/projects.png`, fullPage: true });
+}
 process.kill(-s1.pid);
 
 // Supabase simulato: verifica login e forma delle richieste.
@@ -218,6 +273,7 @@ const s2 = await serve('dist-remote', 4302);
       return json({ access_token: 'x.eyJleHAiOjk5OTk5OTk5OTl9.y', token_type: 'bearer', expires_in: 3600, expires_at: 9999999999, refresh_token: 'r', user });
     }
     if (u.pathname === '/rest/v1/entries' && r.method() === 'GET') return json([]);
+    if (u.pathname === '/rest/v1/projects') return json([{ id: 'shueco', name: 'Shüco', color: 'c1', archived_at: null, created_at: '2026-01-01T00:00:00Z' }]);
     if (u.pathname === '/rest/v1/task_hours') return json(inserted.map(e => ({ who: e.who, code: e.code, done_at: null, hours: String(e.hours), last_day: e.day })));
     if (u.pathname === '/rest/v1/entries' && r.method() === 'POST') {
       const row = r.postDataJSON(); inserted.push(row);

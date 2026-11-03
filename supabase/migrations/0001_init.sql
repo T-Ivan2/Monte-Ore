@@ -1,4 +1,12 @@
--- Esegui tutto nello SQL Editor di Supabase. Si può rieseguire senza perdere i dati.
+-- 0001: schema iniziale. Si può rieseguire senza perdere i dati.
+-- Le migrazioni successive vanno eseguite una sola volta, in ordine: vedi il README.
+
+-- Registro delle migrazioni applicate.
+create table if not exists public.schema_migrations (
+  version text primary key,
+  applied_at timestamptz not null default now()
+);
+alter table public.schema_migrations enable row level security;
 
 create table if not exists public.entries (
   id uuid primary key default gen_random_uuid(),
@@ -117,3 +125,6 @@ create policy "own push subscriptions" on public.push_subscriptions for all to a
 grant select, insert, update, delete on public.entries, public.tasks, public.reminder_settings, public.push_subscriptions to authenticated;
 grant select on public.task_hours to authenticated;
 grant all on public.entries, public.tasks, public.reminder_settings, public.push_subscriptions, public.reminder_log to service_role;
+grant all on public.schema_migrations to service_role;
+
+insert into public.schema_migrations (version) values ('0001') on conflict do nothing;

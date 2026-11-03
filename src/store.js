@@ -1,6 +1,6 @@
 // Accesso ai dati. Senza variabili Supabase l'app gira in locale nel browser, utile per sviluppo e test.
 import { createClient } from '@supabase/supabase-js';
-import { DEFAULT_DAY_HOURS, validDayHours } from './logic.js';
+import { DEFAULT_DAY_HOURS, DEFAULT_PROJECTS, validDayHours } from './logic.js';
 
 const URL = import.meta.env.VITE_SUPABASE_URL;
 const ANON = import.meta.env.VITE_SUPABASE_ANON_KEY;
@@ -28,6 +28,10 @@ function supabaseStore() {
     async updateEntry(id, e) { return toEntry(must(await db.from('entries').update(e).eq('id', id).select().single())); },
     async removeEntry(id) { must(await db.from('entries').delete().eq('id', id)); },
     async removeEntries(ids) { must(await db.from('entries').delete().in('id', ids)); },
+    async listProjects() { return must(await db.from('projects').select('id, name, color, archived_at, created_at').order('created_at')); },
+    async addProject(p) { return must(await db.from('projects').insert(p).select('id, name, color, archived_at, created_at').single()); },
+    async updateProject(id, patch) { must(await db.from('projects').update(patch).eq('id', id)); },
+    async removeProject(id) { must(await db.from('projects').delete().eq('id', id)); },
     async listTasks() {
       return must(await db.from('task_hours').select('*').order('last_day', { ascending: false, nullsFirst: false })).map(t => ({ ...t, hours: Number(t.hours) }));
     },
@@ -66,7 +70,8 @@ function localStore() {
   const read = () => {
     let s;
     try { s = JSON.parse(localStorage.getItem(KEY)); } catch { /* riparte da vuoto */ }
-    return { entries: [], tasks: [], times: DEFAULT_TIMES, dayHours: DEFAULT_DAY_HOURS, ...s };
+    const projects = DEFAULT_PROJECTS.map((p, i) => ({ ...p, archived_at: null, created_at: new Date(Date.UTC(2026, 0, 1, 0, 0, i)).toISOString() }));
+    return { entries: [], tasks: [], projects, times: DEFAULT_TIMES, dayHours: DEFAULT_DAY_HOURS, ...s };
   };
   const touch = (s, e) => {
     if (!e.code) return;
@@ -95,6 +100,19 @@ function localStore() {
     },
     async removeEntry(id) { const s = read(); s.entries = s.entries.filter(x => x.id !== id); write(s); },
     async removeEntries(ids) { const s = read(); s.entries = s.entries.filter(x => !ids.includes(x.id)); write(s); },
+    async listProjects() { return read().projects; },
+    async addProject(p) {
+      const s = read(), row = { ...p, archived_at: null, created_at: new Date().toISOString() };
+      if (s.projects.some(x => x.id === p.id)) throw new Error('duplicate');
+      s.projects.push(row); write(s); return row;
+    },
+    async updateProject(id, patch) { const s = read(); Object.assign(s.projects.find(p => p.id === id), patch); write(s); },
+    // Come nel database: un progetto con task non si può eliminare.
+    async removeProject(id) {
+      const s = read();
+      if (s.tasks.some(t => t.who === id)) throw new Error('in use');
+      s.projects = s.projects.filter(p => p.id !== id); write(s);
+    },
     async listTasks() {
       const s = read();
       return s.tasks.map(t => {
