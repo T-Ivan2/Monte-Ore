@@ -62,6 +62,18 @@ document.addEventListener('click', async ev => {
   if (!b || b.disabled) return;
   await actions[b.dataset.act]?.(b);
 });
+// Frecce, Home e Fine sulle schede, come previsto per i tablist accessibili.
+document.addEventListener('keydown', ev => {
+  const tab = ev.target.closest?.('[role=tab]');
+  if (!tab) return;
+  const tabs = [...document.querySelectorAll('[role=tab]')], i = tabs.indexOf(tab);
+  const next = { ArrowRight: i + 1, ArrowLeft: i - 1, Home: 0, End: tabs.length - 1 }[ev.key];
+  if (next === undefined) return;
+  ev.preventDefault();
+  const target = tabs[(next + tabs.length) % tabs.length];
+  target.focus();
+  target.click();
+});
 document.addEventListener('input', ev => { day.onInput(ev.target); tasks.onInput(ev.target); });
 document.addEventListener('change', async ev => {
   day.onChange(ev.target);

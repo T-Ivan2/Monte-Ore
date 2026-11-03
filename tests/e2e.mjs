@@ -262,6 +262,22 @@ const s1 = await serve('dist', 4301);
   await p.waitForSelector('#restore-project-inpeco');
   await p.click('#restore-project-inpeco');
   await p.waitForSelector('#archive-project-inpeco');
+  // Schede da tastiera: frecce con ritorno all'inizio, Home e Fine; solo la scheda attiva riceve il Tab
+  const active = () => p.evaluate(() => [document.activeElement.id, document.querySelector('[aria-selected=true]').id, document.getElementById('app').getAttribute('aria-labelledby')]);
+  await p.focus('#tab-tasks');
+  await p.keyboard.press('ArrowRight');
+  await p.waitForSelector('.bankfig');
+  assert.deepEqual(await active(), ['tab-month', 'tab-month', 'tab-month']);
+  await p.keyboard.press('ArrowRight');
+  await p.waitForSelector('.strip');
+  assert.deepEqual(await active(), ['tab-day', 'tab-day', 'tab-day']);
+  await p.keyboard.press('End');
+  await p.waitForSelector('.bankfig');
+  await p.keyboard.press('Home');
+  await p.waitForSelector('.strip');
+  assert.deepEqual(await active(), ['tab-day', 'tab-day', 'tab-day']);
+  assert.deepEqual(await p.$$eval('[role=tab]', els => els.map(e => e.tabIndex)), [0, -1, -1]);
+
   // Tocco su una notifica con l'app aperta: torna alla scheda Giorno su oggi
   await p.click('#tab-month');
   await p.click('#prev-month');

@@ -35,12 +35,12 @@ export function renderShell() {
     <section class="panel" id="hours-panel" aria-label="Ore previste" hidden></section>
     <section class="panel" id="notif-panel" aria-label="Notifiche" hidden></section>
     <div class="tabs" role="tablist" aria-label="Vista">
-      <button role="tab" id="tab-day" data-act="view" data-view="day">Giorno</button>
-      <button role="tab" id="tab-tasks" data-act="view" data-view="tasks">Task</button>
-      <button role="tab" id="tab-month" data-act="view" data-view="month">Mese</button>
+      <button role="tab" id="tab-day" data-act="view" data-view="day" aria-controls="app">Giorno</button>
+      <button role="tab" id="tab-tasks" data-act="view" data-view="tasks" aria-controls="app">Task</button>
+      <button role="tab" id="tab-month" data-act="view" data-view="month" aria-controls="app">Mese</button>
     </div>
     <p class="syncbar" id="sync" role="status" hidden></p>
-    <main id="app" class="app"></main>
+    <main id="app" class="app" role="tabpanel"></main>
     <div class="foot">
       ${isLocal ? '<span>Modalità locale: i dati restano in questo browser.</span>' : '<button class="link" data-act="logout" id="logout">Esci</button>'}
       <button class="link" data-act="backup" id="backup">Scarica backup</button>
@@ -51,7 +51,13 @@ export function renderShell() {
 }
 
 export function render() {
-  for (const v of ['day', 'tasks', 'month']) document.getElementById(`tab-${v}`).setAttribute('aria-selected', S.view === v);
+  // Schede accessibili: solo quella attiva riceve il Tab, le altre si raggiungono con le frecce.
+  for (const v of ['day', 'tasks', 'month']) {
+    const tab = document.getElementById(`tab-${v}`);
+    tab.setAttribute('aria-selected', S.view === v);
+    tab.tabIndex = S.view === v ? 0 : -1;
+  }
+  document.getElementById('app').setAttribute('aria-labelledby', `tab-${S.view}`);
   if (S.view === 'month') renderMonth(); else if (S.view === 'tasks') renderTasks(); else renderDay();
   // Ogni modifica passa da qui, quindi il contatore resta sempre allineato.
   updateBadge();
