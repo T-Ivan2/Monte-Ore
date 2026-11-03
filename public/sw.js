@@ -77,7 +77,8 @@ self.addEventListener('notificationclick', e => {
   if (token) { e.waitUntil(quickLog(token)); return; }
   e.waitUntil((async () => {
     const all = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
-    if (all[0]) return all[0].focus();
+    // App già aperta: la porta in primo piano e le chiede di mostrare il giorno da compilare con i dati aggiornati.
+    if (all[0]) { all[0].postMessage({ type: 'open-today' }); return all[0].focus(); }
     return self.clients.openWindow(e.notification.data?.url || '/');
   })());
 });

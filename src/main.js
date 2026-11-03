@@ -96,6 +96,16 @@ onSync({
   failed: n => toast(`${n === 1 ? 'Una modifica non è stata salvata' : n + ' modifiche non sono state salvate'}: il server l'ha rifiutata perché non più valida. Controlla le ore.`)
 });
 window.addEventListener('online', renderSync);
+// Tocco su una notifica con l'app già aperta: mostra il giorno da compilare con i dati aggiornati.
+navigator.serviceWorker?.addEventListener('message', async e => {
+  if (e.data?.type !== 'open-today' || !document.getElementById('app')) return;
+  if (S.editing !== null) return;
+  S.view = 'day';
+  await flushNow();
+  await reload();
+  await day.go(startDay());
+  window.scrollTo(0, 0);
+});
 window.addEventListener('offline', renderSync);
 
 async function startApp() {

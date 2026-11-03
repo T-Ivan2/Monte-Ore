@@ -262,6 +262,14 @@ const s1 = await serve('dist', 4301);
   await p.waitForSelector('#restore-project-inpeco');
   await p.click('#restore-project-inpeco');
   await p.waitForSelector('#archive-project-inpeco');
+  // Tocco su una notifica con l'app aperta: torna alla scheda Giorno su oggi
+  await p.click('#tab-month');
+  await p.click('#prev-month');
+  await p.waitForSelector('#cal-2026-10-05');
+  await p.evaluate(() => navigator.serviceWorker.dispatchEvent(new MessageEvent('message', { data: { type: 'open-today' } })));
+  await p.waitForFunction(() => /Mercoledì 4 novembre/.test(document.querySelector('.dayhead h2')?.textContent));
+  assert.equal(await p.getAttribute('#tab-day', 'aria-selected'), 'true');
+  await p.click('#tab-tasks');
   await p.screenshot({ path: `${OUT}/projects.png`, fullPage: true });
 }
 {
