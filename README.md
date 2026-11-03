@@ -66,6 +66,19 @@ Se riesegui per errore una migrazione già applicata si ferma con un messaggio e
 
 Usa **Prova notifica** per controllare che l'invio funzioni, poi verifica che arrivi un promemoria a un orario impostato.
 
+### Backup
+
+In fondo alla pagina, **Scarica backup** crea un file JSON con tutte le ore di sempre, i progetti, le task (anche terminate) e le impostazioni. Sul telefono si apre il menu di condivisione: salvalo su File, su un cloud o mandalo per mail.
+
+**Ripristina backup** aggiunge ciò che manca e non modifica né elimina i dati che ci sono già. Prima di procedere mostra cosa farà e chiede conferma.
+
+- Ripristinare lo stesso file due volte non crea doppioni: ogni voce ha un identificativo.
+- Le task terminate nel backup tornano terminate.
+- Un progetto con lo stesso nome di uno già presente viene aggiunto come "Nome (backup)".
+- Le voci non valide vengono saltate e conteggiate.
+- Le impostazioni (orari e ore previste) sono nel file come riferimento, ma il ripristino non le applica.
+- Backup e ripristino richiedono la connessione. In modalità locale il backup è l'unico modo per portare i dati su un altro browser.
+
 ### Senza connessione
 
 L'app si apre anche offline, con l'ultima copia dei dati salvata sul dispositivo.
@@ -117,6 +130,7 @@ Ogni pulsante porta un token firmato con una chiave ricavata da `VAPID_PRIVATE_K
 | `src/store.js` | Accesso ai dati: Supabase oppure il browser in modalità locale |
 | `src/state.js` | Stato dell'app e calcoli che ne derivano |
 | `src/outbox.js`, `src/sync.js` | Coda delle modifiche fatte offline e invio quando torna la rete |
+| `src/backup.js` | Backup in JSON: preparazione, controlli e piano di ripristino |
 | `src/render.js`, `src/ui.js` | Struttura della pagina, messaggi ed elementi comuni |
 | `src/views/` | Una vista per file: giorno, task e progetti, mese, pannelli in alto |
 | `src/main.js` | Avvio e collegamento degli eventi alle azioni delle viste |

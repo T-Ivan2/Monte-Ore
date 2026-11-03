@@ -2,7 +2,7 @@
 import { createRequire } from 'node:module';
 import { spawn, execSync } from 'node:child_process';
 import assert from 'node:assert';
-import { readFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 const require = createRequire(process.env.PLAYWRIGHT_FROM || import.meta.url);
 const { chromium } = require('playwright');
 const OUT = process.env.SHOTS || '.';
@@ -264,6 +264,54 @@ const s1 = await serve('dist', 4301);
   await p.waitForSelector('#archive-project-inpeco');
   await p.screenshot({ path: `${OUT}/projects.png`, fullPage: true });
 }
+{
+  // Backup: scarica, cancella tutto, ripristina, ripristina di nuovo senza doppioni
+  const [p] = await page('', { viewport: { width: 1000, height: 900 }, colorScheme: 'light' });
+  p.on('dialog', d => d.accept());
+  await p.goto('http://localhost:4301/');
+  await p.waitForSelector('#entry-form');
+  await p.fill('#f-code', 'T1'); await p.fill('#f-hours', '3'); await p.click('#save');
+  await p.waitForFunction(() => /3 di 8 h/.test(document.querySelector('.state').textContent));
+  await p.click('#strip-2026-11-03');
+  await p.click('#new-task');
+  await p.fill('#f-code', 'OLD1'); await p.fill('#f-hours', '8'); await p.click('#save');
+  await p.waitForFunction(() => /Completo/.test(document.querySelector('.state').textContent));
+  await p.click('#tab-tasks');
+  await p.click('[data-act=donetask][data-code=OLD1]');
+  await p.waitForSelector('[data-act=reopentask][data-code=OLD1]');
+
+  const [dl] = await Promise.all([p.waitForEvent('download'), p.click('#backup')]);
+  assert.equal(dl.suggestedFilename(), 'monte-ore-backup-2026-11-04.json');
+  const file = `${OUT}/backup.json`;
+  await dl.saveAs(file);
+  const saved = JSON.parse(readFileSync(file, 'utf8'));
+  assert.equal(saved.app, 'monte-ore');
+  assert.deepEqual(saved.entries.map(e => [e.day, e.code, e.hours]), [['2026-11-03', 'OLD1', 8], ['2026-11-04', 'T1', 3]]);
+  assert.equal(saved.projects.length, 3);
+
+  await p.evaluate(() => localStorage.clear());
+  await p.reload();
+  await p.waitForSelector('#entry-form');
+  assert.equal(await p.locator('.entry').count(), 0);
+
+  await p.setInputFiles('#restore-file', file);
+  await p.waitForFunction(() => /Ripristino completato: aggiunte 2 voci/.test(document.getElementById('toast').textContent));
+  await p.click('#tab-day');
+  await p.waitForFunction(() => /3 di 8 h/.test(document.querySelector('.state').textContent));
+  await p.click('#tab-tasks');
+  await p.waitForSelector('[data-act=reopentask][data-code=OLD1]');
+  assert.equal(await p.locator('[data-act=donetask][data-code=T1]').count(), 1);
+
+  await p.setInputFiles('#restore-file', file);
+  await p.waitForFunction(() => /Niente da ripristinare: 2 voci sono già presenti/.test(document.getElementById('toast').textContent));
+  await p.click('#tab-month');
+  await p.waitForSelector('.bankfig');
+  assert.match(await p.textContent('.bankfig'), /11 di 168 h/);
+
+  writeFileSync(`${OUT}/non-backup.json`, '{"ciao": 1}');
+  await p.setInputFiles('#restore-file', `${OUT}/non-backup.json`);
+  await p.waitForFunction(() => /non è un backup di Monte Ore/.test(document.getElementById('toast').textContent));
+}
 process.kill(-s1.pid);
 
 // Supabase simulato: verifica login e forma delle richieste.
@@ -360,6 +408,12 @@ const s2 = await serve('dist-remote', 4302);
   await p.reload();
   await p.waitForSelector('.entry');
   assert.match(await state(), /6,5 di 8 h/);
+
+  // Backup dal server: tutte le voci, comprese quelle inviate dopo essere state offline
+  const [dl] = await Promise.all([p.waitForEvent('download'), p.click('#backup')]);
+  const remote = JSON.parse(readFileSync(await dl.path(), 'utf8'));
+  assert.deepEqual(remote.entries.map(e => e.hours).sort(), [2.5, 4]);
+  assert.deepEqual(remote.settings.times, ['13:00']);
 }
 process.kill(-s2.pid);
 await b.close();

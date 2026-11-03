@@ -1,3 +1,4 @@
+import { saveFile } from './files.js';
 import { TARGET, DEFAULT_PROJECTS, ABSENCES, isAbsence, parse } from './logic.js';
 
 const DEFAULT_NAMES = Object.fromEntries([...DEFAULT_PROJECTS, ...ABSENCES].map(w => [w.id, w.name]));
@@ -61,15 +62,5 @@ export async function exportMonth(entries, month, target, dayLen, names) {
   const blob = await writeXlsxFile(buildSheets(entries, target, dayLen, names)).toBlob();
   const name = `monte-ore-${month}.xlsx`;
   const file = new File([blob], name, { type: blob.type || 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-  // Sul telefono apre il menu di condivisione: Salva su File, Mail, WhatsApp e così via.
-  if (window.matchMedia('(pointer: coarse)').matches && navigator.canShare?.({ files: [file] })) {
-    try { await navigator.share({ files: [file], title: name }); return 'shared'; }
-    catch (err) { if (err.name === 'AbortError') return 'cancelled'; }
-  }
-  const url = URL.createObjectURL(file);
-  const a = document.createElement('a');
-  a.href = url; a.download = name;
-  document.body.append(a); a.click(); a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 10000);
-  return 'downloaded';
+  return saveFile(file);
 }

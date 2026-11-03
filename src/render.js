@@ -43,6 +43,9 @@ export function renderShell() {
     <main id="app" class="app"></main>
     <div class="foot">
       ${isLocal ? '<span>Modalità locale: i dati restano in questo browser.</span>' : '<button class="link" data-act="logout" id="logout">Esci</button>'}
+      <button class="link" data-act="backup" id="backup">Scarica backup</button>
+      <button class="link" data-act="restore" id="restore">Ripristina backup</button>
+      <input type="file" id="restore-file" accept="application/json,.json" hidden>
     </div>
   </div>`;
 }
