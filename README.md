@@ -137,6 +137,7 @@ Ogni pulsante porta un token firmato con una chiave ricavata da `VAPID_PRIVATE_K
 | `src/main.js` | Avvio e collegamento degli eventi alle azioni delle viste |
 | `netlify/` | Funzioni server: promemoria pianificati con pulsanti, azioni rapide (`/api/quick-log`) e notifica di prova |
 | `supabase/migrations/` | Schema del database, una migrazione per file |
+| `PRODUCT.md`, `DESIGN.md` | A chi serve l'app e con quali principi; sistema visivo (colori, caratteri, forme, componenti) da rispettare nelle modifiche future |
 
 Ogni vista esporta `actions`: il nome dell'azione corrisponde all'attributo `data-act` dei pulsanti.
 

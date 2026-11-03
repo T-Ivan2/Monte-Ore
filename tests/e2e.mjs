@@ -64,6 +64,9 @@ const s1 = await serve('dist', 4301);
   await p.fill('#f-code', 'task0048231');
   assert.equal(await p.inputValue('#f-code'), 'TASK0048231');
   await p.fill('#f-hours', '3');
+  // La descrizione è richiudibile: si apre solo quando serve.
+  assert.equal(await p.locator('#f-desc').count(), 0);
+  await p.click('#add-desc');
   await p.fill('#f-desc', '<b>riunione</b>');
   await p.click('#save');
   await p.waitForSelector('.entry');
@@ -83,6 +86,8 @@ const s1 = await serve('dist', 4301);
   await p.click('#save');
   await p.waitForFunction(() => /9 di 8 h/.test(document.querySelector('.state').textContent));
   assert.match(await p.textContent('.state'), /1 h in più/);
+  // Ai lettori vocali le ore in più non risultano "incomplete"
+  assert.match(await p.textContent('#strip-2026-11-04 .sr'), /9 ore, oltre le ore previste, oggi/);
   await p.click('#undo');
   await p.waitForFunction(() => /8 di 8 h/.test(document.querySelector('.state').textContent));
   await p.click('[id^=remove-] >> nth=-1');
@@ -194,7 +199,9 @@ const s1 = await serve('dist', 4301);
   await p.waitForSelector('.bankfig');
   assert.match(await p.textContent('.bankfig'), /6 di 152 h/);
   assert.match(await p.textContent('#cal-2026-11-07'), /2/);
-  assert.match(await p.textContent('#cal-2026-11-08'), /–/);
+  // Calendario quieto: la domenica vuota non mostra nulla, ma il lettore vocale sente "Weekend"
+  assert.equal(await p.textContent('#cal-2026-11-08 .t'), '');
+  assert.match(await p.textContent('#cal-2026-11-08'), /Domenica 8 novembre, Weekend/);
   await p.screenshot({ path: `${OUT}/phone-month.png`, fullPage: true });
   assert.equal(await p.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
 

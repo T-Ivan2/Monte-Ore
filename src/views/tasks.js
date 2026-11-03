@@ -2,7 +2,7 @@
 import { COLORS, colorVar, fmt, slugify, validateProject } from '../logic.js';
 import { store } from '../store.js';
 import { S, who, freshDraft, refreshTasks, refreshProjects } from '../state.js';
-import { esc, keepFocus, toast } from '../ui.js';
+import { esc, keepFocus, toast, ICON } from '../ui.js';
 import { render } from '../render.js';
 
 function taskRow(t) {
@@ -48,7 +48,7 @@ function projectFormHtml() {
     </div>
     <fieldset>
       <legend>Colore</legend>
-      <div class="chips">${COLORS.map(c => `<label style="--client:${colorVar(c.id)}"><input type="radio" name="pcolor" id="pcolor-${c.id}" value="${c.id}" ${f.color === c.id ? 'checked' : ''}><span class="dot"></span>${c.name}</label>`).join('')}</div>
+      <div class="chips">${COLORS.map(c => `<label style="--client:${colorVar(c.id)}"><input type="radio" name="pcolor" id="pcolor-${c.id}" value="${c.id}" ${f.color === c.id ? 'checked' : ''}><span class="dot"></span>${c.name}${ICON.tick}</label>`).join('')}</div>
       ${f.errors.color ? `<p class="err">${f.errors.color}</p>` : ''}
     </fieldset>
     <div class="row">

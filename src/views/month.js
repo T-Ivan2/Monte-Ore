@@ -1,7 +1,7 @@
 // Vista Mese: monte ore, calendario ed export in Excel.
 import { ABSENCES, DOW, MONTHS, fmt, parse, monday, weekDays, holidayName, monthDays, shiftMonth, dayLength, incompleteDays } from '../logic.js';
 import { S, today, dayTotal, target, offLabel, who, names, ensure } from '../state.js';
-import { esc, dayLabel, toast, loadFail } from '../ui.js';
+import { esc, toast, loadFail, ICON, dow, hoursText, dayState } from '../ui.js';
 import { render } from '../render.js';
 import { go } from './day.js';
 
@@ -26,19 +26,25 @@ export function renderMonth() {
   const cells = [...new Set(days.map(monday))].flatMap(weekDays).map(d => {
     if (!days.includes(d)) return '<div></div>';
     const t = dayTotal(d), h = holidayName(d), g = target(d);
+    const done = g > 0 && t === g, lack = g > 0 && ((d <= t0 && t < g) || t > g);
     const cls = [
-      d === t0 ? 'today' : '', g === 0 ? 'off' : '', h && !t ? 'holiday' : '', g > 0 && t === g ? 'done' : '',
-      g > 0 && ((d <= t0 && t < g) || t > g) ? 'lack' : '', (g === 0 || d > t0) && t === 0 ? 'future' : ''
+      d === t0 ? 'today' : '', g === 0 ? 'off' : '', h && !t ? 'holiday' : '', done ? 'done' : '',
+      lack ? 'lack' : '', (g === 0 || d > t0) && t === 0 ? 'future' : ''
     ].join(' ');
-    const label = t ? fmt(t) : h ? 'Fest.' : g === 0 || d > t0 ? '–' : fmt(t);
-    return `<button class="calday ${cls}" data-act="openday" data-day="${d}" id="cal-${d}" aria-label="${dayLabel(d)}, ${g === 0 && !t ? offLabel(d) : fmt(t) + ' ore'}"><span class="n">${parse(d).getDate()}</span><span class="t">${label}</span></button>`;
+    // Calendario quieto: i giorni futuri e liberi senza ore restano vuoti, risaltano solo quelli incompleti.
+    const shown = t > 0 || (g > 0 && d <= t0);
+    const label = shown ? fmt(t) : h ? 'Fest.' : '';
+    const state = dayState(t, g, d <= t0);
+    const tail = shown ? `, ${hoursText(t)}${state ? ', ' + state : ''}` : g === 0 ? `, ${offLabel(d)}` : ', nessuna ora';
+    // Ai lettori vocali: giorno della settimana, data, ore e stato; il numero visibile è già detto nel testo nascosto.
+    return `<button class="calday ${cls}" data-act="openday" data-day="${d}" id="cal-${d}"><span class="sr">${dow(parse(d))} </span><span class="n">${parse(d).getDate()}</span><span class="sr"> ${MONTHS[m - 1]}${tail}</span><span class="t" aria-hidden="true">${label}</span></button>`;
   }).join('');
   const lateText = late ? `<span class="warn">${late === 1 ? '1 giorno incompleto' : late + ' giorni incompleti'}</span>` : working.some(d => d <= t0) ? '<span class="ok">Nessun giorno incompleto</span>' : '';
   app.innerHTML = `
     <div class="weekbar">
-      <button class="icon" data-act="month" data-delta="-1" id="prev-month" aria-label="Mese precedente">‹</button>
+      <button class="icon" data-act="month" data-delta="-1" id="prev-month" aria-label="Mese precedente">${ICON.prev}</button>
       <h2 class="mhead">${MONTHS[m - 1][0].toUpperCase() + MONTHS[m - 1].slice(1)} ${y}</h2>
-      <button class="icon" data-act="month" data-delta="1" id="next-month" aria-label="Mese successivo">›</button>
+      <button class="icon" data-act="month" data-delta="1" id="next-month" aria-label="Mese successivo">${ICON.next}</button>
       <span class="spacer"></span>
       ${S.month === t0.slice(0, 7) ? '' : '<button class="link" data-act="thismonth" id="this-month">Vai a oggi</button>'}
     </div>

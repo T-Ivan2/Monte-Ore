@@ -3,7 +3,7 @@ import { DOW, fmt, parseHours, isHalfHours } from '../logic.js';
 import { store } from '../store.js';
 import { pushStatus, enablePush, disablePush, testPush } from '../push.js';
 import { S, freshDraft } from '../state.js';
-import { CLOCK, BELL, keepFocus, toast } from '../ui.js';
+import { CLOCK, BELL, ICON, keepFocus, toast } from '../ui.js';
 import { render } from '../render.js';
 
 export function renderHours() {
@@ -12,8 +12,8 @@ export function renderHours() {
   const open = S.panel === 'hours';
   const perWeek = S.dayHours.reduce((n, h) => n + h, 0);
   t.setAttribute('aria-expanded', open);
-  t.innerHTML = `${CLOCK}<b>${fmt(perWeek)} h<span class="wide">/sett.</span></b>`;
-  t.setAttribute('aria-label', `Ore previste: ${fmt(perWeek)} a settimana`);
+  // Il testo visibile resta nel nome letto dai lettori vocali; il contesto si aggiunge come testo nascosto.
+  t.innerHTML = `${CLOCK}<span class="sr">Ore previste: </span><b>${fmt(perWeek)} h<span class="wide" aria-hidden="true">/sett.</span></b><span class="sr"> a settimana</span>`;
   const p = document.getElementById('hours-panel');
   p.hidden = !open;
   if (!open) return;
@@ -37,14 +37,14 @@ export function renderNotif() {
   if (!t) return;
   const open = S.panel === 'notif';
   t.setAttribute('aria-expanded', open);
-  t.innerHTML = `${BELL}${S.times.length === 0 ? 'Notifiche spente' : `<b>${S.times.length <= 2 ? S.times.join(', ') : S.times.length + ' orari'}</b>`}`;
+  t.innerHTML = `${BELL}${S.times.length === 0 ? 'Notifiche spente' : `<span class="sr">Promemoria: </span><b>${S.times.length <= 2 ? S.times.join(', ') : S.times.length + ' orari'}</b>`}`;
   const p = document.getElementById('notif-panel');
   p.hidden = !open;
   if (!open) return;
   keepFocus(() => {
     p.innerHTML = `<h2>Notifiche</h2>
       <p>Dal lunedì al venerdì, solo se nella giornata mancano ancora ore.</p>
-      <div class="times">${S.times.map((x, i) => `<span class="time"><input type="time" id="time-${i}" data-time="${i}" value="${x}" aria-label="Orario notifica ${i + 1}"><button data-act="deltime" data-i="${i}" id="deltime-${i}" aria-label="Rimuovi ${x}">×</button></span>`).join('')}</div>
+      <div class="times">${S.times.map((x, i) => `<span class="time"><input type="time" id="time-${i}" data-time="${i}" value="${x}" aria-label="Orario notifica ${i + 1}"><button data-act="deltime" data-i="${i}" id="deltime-${i}" aria-label="Rimuovi ${x}">${ICON.close}</button></span>`).join('')}</div>
       <div class="row"><button class="btn" data-act="addtime" id="add-time">Aggiungi orario</button>${pushControls()}</div>`;
   });
 }

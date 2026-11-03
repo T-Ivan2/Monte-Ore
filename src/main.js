@@ -1,6 +1,5 @@
 // Avvio dell'app e collegamento degli eventi. Ogni vista dichiara le sue azioni in views/.
 // Font serviti dal sito: niente richieste a Google e disponibili anche offline.
-import '@fontsource/familjen-grotesk/latin-500.css';
 import '@fontsource/familjen-grotesk/latin-700.css';
 import '@fontsource/ibm-plex-sans/latin-400.css';
 import '@fontsource/ibm-plex-sans/latin-500.css';
