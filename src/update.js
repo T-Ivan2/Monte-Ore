@@ -1,5 +1,6 @@
 // Avviso di nuova versione: confronta lo script in esecuzione con quello pubblicato.
 import { S } from './state.js';
+import { ICON } from './ui.js';
 
 const running = document.querySelector('script[type="module"][src^="/assets/"]')?.getAttribute('src');
 let shown = false;
@@ -16,7 +17,7 @@ export async function checkUpdate() {
   shown = true;
   const box = document.createElement('div');
   box.className = 'notice'; box.id = 'update'; box.setAttribute('role', 'status');
-  box.innerHTML = '<button class="open" data-act="reload" id="reload">Nuova versione disponibile</button><small>Tocca per aggiornare l\'app.</small><button class="x" data-act="dismissupdate" aria-label="Chiudi">×</button>';
+  box.innerHTML = `<button class="open" data-act="reload" id="reload">Nuova versione disponibile</button><small>Tocca per aggiornare l'app.</small><button class="x" data-act="dismissupdate" aria-label="Chiudi">${ICON.close}</button>`;
   document.body.append(box);
 }
 
