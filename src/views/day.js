@@ -1,9 +1,9 @@
 // Vista Giorno: settimana, voci del giorno e modulo per registrare le ore.
-import { ABSENCES, DOW, fmt, parse, addDays, weekDays, isAbsence, validateEntry, parseHours, normalizeCode } from '../logic.js';
+import { ABSENCES, DOW, fmt, parse, addDays, weekDays, isAbsence, validateEntry, parseHours, normalizeCode, TITLE_MAX } from '../logic.js';
 import * as sync from '../sync.js';
 import {
   S, today, dayEntries, dayTotal, target, rest, offLabel, activeProjects, who, openTasks, taskChoice, freshDraft,
-  copySource, startDay, around, pickDay, refreshTasks, ensure
+  copySource, startDay, around, pickDay, refreshTasks, ensure, taskOf
 } from '../state.js';
 import { esc, dayLabel, shortLabel, weekLabel, keepFocus, toast, loadFail, ICON, hoursText, dayState } from '../ui.js';
 import { render } from '../render.js';
@@ -61,12 +61,17 @@ export function renderDay() {
   });
 }
 
+// Consultando il giorno conta il codice: in primo piano, con titolo e progetto piccoli sotto.
 function entryHtml(e) {
   const w = who(e.who);
+  const title = e.code ? taskOf(e.who, e.code)?.title : null;
+  const head = e.code
+    ? `<div class="who"><span class="dot"></span><span class="code strong">${esc(e.code)}</span></div>`
+    : `<div class="who"><span class="dot"></span>${esc(w.name)}</div>`;
   return `<div class="entry ${S.editing === e.id ? 'editing' : ''}" style="--client:${w.color}">
-    <div class="who"><span class="dot"></span>${esc(w.name)}</div>
+    ${head}
     <div class="hrs">${fmt(e.hours)} h</div>
-    ${e.code ? `<div class="code">${esc(e.code)}</div>` : ''}
+    ${e.code ? `<div class="tsub">${title ? `<span class="ttl">${esc(title)}</span> · ` : ''}${esc(w.name)}</div>` : ''}
     ${e.description ? `<div class="desc">${esc(e.description)}</div>` : ''}
     <div class="ops">
       <button class="link" data-act="edit" data-id="${e.id}" id="edit-${e.id}">Modifica</button>
@@ -131,17 +136,25 @@ function taskFieldHtml() {
   const open = openTasks(draft.who);
   const err = errors.code ? `<p class="err" id="e-code">${errors.code}</p>` : '';
   if (draft.newTask) {
+    const errTitle = errors.title ? `<p class="err" id="e-title">${errors.title}</p>` : '';
     return `<div class="field">
       <label class="lbl" for="f-code">Codice task ServiceNow</label>
       <input class="input mono" id="f-code" value="${esc(draft.code)}" autocomplete="off" autocapitalize="characters" spellcheck="false" required ${errors.code ? 'aria-invalid="true" aria-describedby="e-code"' : ''}>
       ${err}
+    </div>
+    <div class="field">
+      <label class="lbl" for="f-title">Titolo della task <span>(facoltativo, uguale in tutte le ore della task)</span></label>
+      <input class="input" id="f-title" value="${esc(draft.title ?? '')}" maxlength="${TITLE_MAX}" autocomplete="off" placeholder="Es. Analisi requisiti" ${errors.title ? 'aria-invalid="true" aria-describedby="e-title"' : ''}>
+      ${errTitle}
       ${open.length ? '<div><button type="button" class="link" data-act="picktask" id="pick-task">Scegli tra le task aperte</button></div>' : ''}
     </div>`;
   }
   return `<fieldset ${errors.code ? 'aria-describedby="e-code"' : ''}>
     <legend>Task</legend>
     <div class="chips tasks">
-      ${open.map((t, i) => `<label class="mono"><input type="radio" name="task" id="task-${i}" value="${esc(t.code)}" ${draft.code === t.code ? 'checked' : ''}>${esc(t.code)}${ICON.tick}</label>`).join('')}
+      ${open.map((t, i) => `<label class="taskopt"><input type="radio" name="task" id="task-${i}" value="${esc(t.code)}" ${draft.code === t.code ? 'checked' : ''}><span class="topt">${t.title
+        ? `<span class="tt">${esc(t.title)}</span><span class="tc">${esc(t.code)}</span>`
+        : `<span class="tt tcode">${esc(t.code)}</span>`}</span>${ICON.tick}</label>`).join('')}
       <button type="button" class="chipbtn" data-act="newtask" id="new-task">${ICON.plus}Nuova task</button>
     </div>
     ${err}
@@ -157,11 +170,11 @@ export async function go(d) {
 async function saveEntry() {
   if (S.busy) return;
   const others = dayEntries(S.selected).filter(e => e.id !== S.editing).reduce((s, e) => s + e.hours, 0);
-  const { errors, value } = validateEntry(S.draft, others);
+  const { errors, value, taskTitle } = validateEntry(S.draft, others);
   S.errors = errors;
   if (Object.keys(errors).length) {
     render();
-    const field = errors.who ? 'go-projects' : !errors.code ? 'f-hours' : S.draft.newTask ? 'f-code' : 'task-0';
+    const field = errors.who ? 'go-projects' : errors.code ? (S.draft.newTask ? 'f-code' : 'task-0') : errors.title ? 'f-title' : 'f-hours';
     document.getElementById(field)?.focus();
     return;
   }
@@ -171,6 +184,7 @@ async function saveEntry() {
       const prev = S.entries.find(e => e.id === S.editing);
       const { row, queued } = await sync.updateEntry(prev, value);
       S.entries = S.entries.map(e => e.id === row.id ? row : e);
+      if (taskTitle) await sync.setTaskTitle(value.who, value.code, taskTitle);
       await refreshTasks();
       const { who: w, hours, code, description } = prev;
       toast(`Voce aggiornata.${later(queued)}`, async () => {
@@ -182,6 +196,7 @@ async function saveEntry() {
     } else {
       const { row, queued } = await sync.addEntry({ day: S.selected, ...value });
       S.entries = [...S.entries, row];
+      if (taskTitle) await sync.setTaskTitle(value.who, value.code, taskTitle);
       await refreshTasks();
       toast(`Salvate ${fmt(row.hours)} h su ${who(row.who).name}.${later(queued)}`, async () => {
         await sync.removeEntry(row.id);
@@ -260,7 +275,7 @@ export const actions = {
     document.getElementById('f-hours')?.focus();
   },
   remove: b => removeEntry(b.dataset.id),
-  newtask: () => { S.draft.newTask = true; S.draft.code = ''; S.errors = {}; render(); document.getElementById('f-code').focus(); },
+  newtask: () => { S.draft.newTask = true; S.draft.code = ''; S.draft.title = ''; S.errors = {}; render(); document.getElementById('f-code').focus(); },
   picktask: () => { S.draft.newTask = false; S.draft.code = taskChoice(S.draft.who).code; S.errors = {}; render(); },
   copyday: () => copyDay(),
   adddesc: () => { S.draft.descOpen = true; render(); document.getElementById('f-desc')?.focus(); }
@@ -270,6 +285,7 @@ export function onInput(t) {
   if (t.id === 'f-code') { const v = normalizeCode(t.value); if (v !== t.value) t.value = v; S.draft.code = v; }
   if (t.id === 'f-hours') S.draft.hours = t.value;
   if (t.id === 'f-desc') S.draft.desc = t.value;
+  if (t.id === 'f-title') S.draft.title = t.value;
 }
 export function onChange(t) {
   if (t.name === 'kind') {

@@ -14,7 +14,7 @@ export function buildBackup({ entries, projects, tasks, settings }, now = new Da
     exported_at: now.toISOString(),
     settings: { times: settings.times, day_hours: settings.dayHours },
     projects: projects.map(({ id, name, color, archived_at, created_at }) => ({ id, name, color, archived_at: archived_at ?? null, created_at })),
-    tasks: tasks.map(({ who, code, done_at, created_at }) => ({ who, code, done_at: done_at ?? null, created_at })),
+    tasks: tasks.map(({ who, code, done_at, created_at, title }) => ({ who, code, title: title || null, done_at: done_at ?? null, created_at })),
     entries: [...entries].sort((a, b) => a.day.localeCompare(b.day))
       .map(({ id, day, who, hours, code, description, created_at }) => ({ id, day, who, hours, code: code ?? null, description: description || '', created_at }))
   };
@@ -31,7 +31,9 @@ export function parseBackup(text) {
   const str = (v, max) => typeof v === 'string' && v.length > 0 && v.length <= max;
   const projects = data.projects.filter(p => str(p?.id, 40) && /^[a-z0-9][a-z0-9-]*$/.test(p.id) && !ABSENCE_IDS.includes(p.id)
     && str(p.name, 40) && COLORS.some(c => c.id === p.color));
-  const tasks = (Array.isArray(data.tasks) ? data.tasks : []).filter(t => str(t?.who, 40) && str(t?.code, 40));
+  // Un titolo non valido non scarta la task: si perde solo il titolo.
+  const tasks = (Array.isArray(data.tasks) ? data.tasks : []).filter(t => str(t?.who, 40) && str(t?.code, 40))
+    .map(t => ({ ...t, title: typeof t.title === 'string' && t.title.trim() && t.title.trim().length <= 80 ? t.title.trim().replace(/\s+/g, ' ') : null }));
   const valid = e => e && str(e.id, 64) && DAY.test(e.day) && isHalfHours(e.hours) && e.hours > 0
     && (ABSENCE_IDS.includes(e.who)
       ? e.code == null
@@ -64,10 +66,13 @@ export function planRestore(backup, current) {
   const haveTask = new Set(current.tasks.map(t => `${t.who}|${t.code}`));
   const created = new Set(entries.filter(e => e.code).map(e => `${e.who}|${e.code}`).filter(k => !haveTask.has(k)));
   const doneTasks = backup.tasks.filter(t => t.done_at && created.has(`${t.who}|${t.code}`)).map(t => ({ who: t.who, code: t.code }));
+  // Anche il titolo torna solo sulle task create dal ripristino: quelle esistenti restano come sono.
+  const titles = backup.tasks.filter(t => t.title && created.has(`${t.who}|${t.code}`)).map(t => ({ who: t.who, code: t.code, title: t.title }));
   return {
     projects,
     entries,
     doneTasks,
+    titles,
     present: backup.entries.length - fresh.length,
     skipped: backup.invalid + fresh.length - entries.length
   };

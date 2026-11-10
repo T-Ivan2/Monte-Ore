@@ -30,6 +30,28 @@ describe('coda offline: fusione', () => {
   });
 });
 
+describe('coda offline: titolo delle task', () => {
+  const title = (t, code = 'T1') => ({ op: 'title', who: 'inpeco', code, title: t });
+  it('tiene solo l\'ultimo titolo, dopo la voce che crea la task', () => {
+    const qq = q({ op: 'add', row: row('a', 3, { code: 'NEW' }) }, title('Primo', 'NEW'), { op: 'add', row: row('b') }, title('Secondo', 'NEW'));
+    expect(qq.map(x => x.op)).toEqual(['add', 'add', 'title']);
+    expect(qq[2].title).toBe('Secondo');
+  });
+  it('eliminare una voce non toglie il titolo della task', () => {
+    expect(q({ op: 'add', row: row('a') }, title('Analisi'), { op: 'remove', id: 'a' })).toEqual([title('Analisi')]);
+  });
+  it('mostra il titolo anche sulle task create offline', () => {
+    const out = overlayTasks([], q({ op: 'add', row: row('a', 2, { code: 'NEW' }) }, title('Nuova analisi', 'NEW')));
+    expect(out).toMatchObject([{ code: 'NEW', title: 'Nuova analisi', hours: 2 }]);
+  });
+  it('invia il titolo in ordine', async () => {
+    const calls = [];
+    const api = { add: async r => calls.push(['add', r.id]), update: async () => {}, remove: async () => {}, title: async (w, c, t) => calls.push(['title', c, t]) };
+    await flush(q({ op: 'add', row: row('a', 2, { code: 'NEW' }) }, title('Analisi', 'NEW')), api, isNet);
+    expect(calls).toEqual([['add', 'a'], ['title', 'NEW', 'Analisi']]);
+  });
+});
+
 describe('coda offline: dati mostrati', () => {
   const server = [row('s1', 2), row('s2', 1)];
   it('applica aggiunte, modifiche ed eliminazioni in attesa', () => {

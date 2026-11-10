@@ -9,23 +9,26 @@ const excelDate = k => { const [y, m, d] = k.split('-').map(Number); return new 
 const WEEKDAYS = ['Domenica', 'Lunedì', 'Martedì', 'Mercoledì', 'Giovedì', 'Venerdì', 'Sabato'];
 
 // Prepara i fogli del file: dettaglio delle voci e riepilogo del mese.
-// dayLen sono le ore di una giornata, usate per convertire le ore in giornate. names associa ogni progetto o assenza al suo nome.
-export function buildSheets(entries, target, dayLen = TARGET, names = DEFAULT_NAMES) {
+// dayLen sono le ore di una giornata, usate per convertire le ore in giornate. names associa ogni progetto o assenza al suo nome;
+// titles associa "progetto|codice" al titolo della task.
+export function buildSheets(entries, target, dayLen = TARGET, names = DEFAULT_NAMES, titles = {}) {
   const nameOf = id => names[id] ?? id;
+  const titleOf = (who, code) => (code && titles[`${who}|${code}`]) || '';
   const sorted = [...entries].sort((a, b) => a.day.localeCompare(b.day) || nameOf(a.who).localeCompare(nameOf(b.who), 'it'));
   const total = sorted.reduce((s, e) => s + e.hours, 0);
   const detail = [
-    ['Data', 'Giorno', 'Tipo', 'Progetto o assenza', 'Codice ServiceNow', 'Ore', 'Descrizione'].map(head),
+    ['Data', 'Giorno', 'Tipo', 'Progetto o assenza', 'Codice ServiceNow', 'Titolo task', 'Ore', 'Descrizione'].map(head),
     ...sorted.map(e => [
       { value: excelDate(e.day), type: Date, format: 'dd/mm/yyyy' },
       { value: WEEKDAYS[parse(e.day).getDay()], type: String },
       { value: isAbsence(e.who) ? 'Assenza' : 'Progetto', type: String },
       { value: nameOf(e.who), type: String },
       { value: e.code || '', type: String },
+      { value: titleOf(e.who, e.code), type: String, wrap: true },
       { value: e.hours, type: Number, format: '0.0' },
       { value: e.description || '', type: String, wrap: true }
     ]),
-    [{ value: 'Totale', fontWeight: 'bold' }, null, null, null, null, { value: total, type: Number, format: '0.0', fontWeight: 'bold' }, null]
+    [{ value: 'Totale', fontWeight: 'bold' }, null, null, null, null, null, { value: total, type: Number, format: '0.0', fontWeight: 'bold' }, null]
   ];
   const sum = (arr) => arr.reduce((s, e) => s + e.hours, 0);
   const ids = [...new Set([...Object.keys(names), ...sorted.map(e => e.who)])];
@@ -41,25 +44,26 @@ export function buildSheets(entries, target, dayLen = TARGET, names = DEFAULT_NA
     [{ value: 'Totale', fontWeight: 'bold' }, { value: total, type: Number, format: '0.0', fontWeight: 'bold' }, { value: total / dayLen, type: Number, format: '0.00', fontWeight: 'bold' }],
     [{ value: 'Ore previste', type: String }, { value: target, type: Number, format: '0.0' }, { value: target / dayLen, type: Number, format: '0.00' }],
     [null, null, null],
-    [head('Task'), head('Ore'), head('Progetto')],
+    [head('Task'), head('Ore'), head('Progetto'), head('Titolo')],
     ...taskKeys.map(k => {
       const [who, code] = k.split('|');
       return [
         { value: code, type: String },
         { value: sum(sorted.filter(e => e.who === who && e.code === code)), type: Number, format: '0.0' },
-        { value: nameOf(who), type: String }
+        { value: nameOf(who), type: String },
+        { value: titleOf(who, code), type: String, wrap: true }
       ];
     })
   ];
   return [
-    { data: detail, sheet: 'Dettaglio', columns: [{ width: 12 }, { width: 12 }, { width: 10 }, { width: 18 }, { width: 20 }, { width: 7 }, { width: 44 }] },
-    { data: summary, sheet: 'Riepilogo', columns: [{ width: 22 }, { width: 8 }, { width: 18 }] }
+    { data: detail, sheet: 'Dettaglio', columns: [{ width: 12 }, { width: 12 }, { width: 10 }, { width: 18 }, { width: 20 }, { width: 30 }, { width: 7 }, { width: 44 }] },
+    { data: summary, sheet: 'Riepilogo', columns: [{ width: 22 }, { width: 8 }, { width: 18 }, { width: 34 }] }
   ];
 }
 
-export async function exportMonth(entries, month, target, dayLen, names) {
+export async function exportMonth(entries, month, target, dayLen, names, titles) {
   const { default: writeXlsxFile } = await import('write-excel-file/browser');
-  const blob = await writeXlsxFile(buildSheets(entries, target, dayLen, names)).toBlob();
+  const blob = await writeXlsxFile(buildSheets(entries, target, dayLen, names, titles)).toBlob();
   const name = `monte-ore-${month}.xlsx`;
   const file = new File([blob], name, { type: blob.type || 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
   return saveFile(file);

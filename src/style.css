@@ -223,3 +223,18 @@ header .row { flex-wrap: nowrap; gap: 6px; justify-content: flex-end; }
   /* I link dentro una frase restano in linea con il testo. */
   p .link { display: inline; min-height: 0; }
 }
+
+/* Task: scelta con titolo in primo piano e codice sotto; voci e scheda Task con codice in primo piano */
+.chips.tasks { display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; }
+.chips.tasks .taskopt { justify-content: space-between; text-align: left; }
+.chips.tasks .chipbtn { justify-self: start; }
+.topt { display: grid; gap: 1px; min-width: 0; }
+.topt .tt { font-weight: 600; overflow-wrap: anywhere; }
+.topt .tc { font: 500 13px var(--font-code); color: var(--muted); overflow-wrap: anywhere; }
+.topt .tt.tcode { font: 500 15px var(--font-code); }
+.chips.tasks .tick { margin-left: 12px; }
+.who .code.strong { font-size: 16px; }
+.tsub { grid-column: 1 / -1; font-size: 14px; color: var(--muted); overflow-wrap: anywhere; }
+.tsub .ttl, .tsub.ttl { color: var(--ink); }
+.inlineform { grid-column: 1 / -1; margin-top: 6px; padding: 0; background: none; box-shadow: none; gap: 10px; }
+.inlineform .lbl .code { font-size: 14px; color: var(--ink); }

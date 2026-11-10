@@ -1,23 +1,60 @@
 // Vista Task: task aperte e terminate, e gestione dei progetti.
-import { COLORS, colorVar, fmt, slugify, validateProject } from '../logic.js';
+import { COLORS, colorVar, fmt, slugify, validateProject, normalizeTitle, TITLE_MAX } from '../logic.js';
 import { store } from '../store.js';
+import * as sync from '../sync.js';
 import { S, who, freshDraft, refreshTasks, refreshProjects } from '../state.js';
 import { esc, keepFocus, toast, ICON } from '../ui.js';
 import { render } from '../render.js';
 
+// Il titolo si modifica dentro la riga della task, senza aprire altre schermate.
+function titleFormHtml(t) {
+  const f = S.taskEdit;
+  return `<form id="title-form" class="inlineform" novalidate>
+    <label class="lbl" for="t-title">Titolo di <span class="code">${esc(t.code)}</span></label>
+    <input class="input" id="t-title" value="${esc(f.title)}" maxlength="${TITLE_MAX}" autocomplete="off" placeholder="Es. Analisi requisiti" ${f.error ? 'aria-invalid="true" aria-describedby="e-t-title"' : ''}>
+    ${f.error ? `<p class="err" id="e-t-title">${f.error}</p>` : ''}
+    <p class="empty small">Resta uguale in tutte le ore registrate su questa task. Lascia vuoto per toglierlo.</p>
+    <div class="row">
+      <button class="btn primary" type="submit" id="t-save">Salva titolo</button>
+      <button class="btn" type="button" data-act="canceltitle" id="t-cancel">Annulla</button>
+    </div>
+  </form>`;
+}
+
+// Consultando le task conta il codice: in primo piano, con titolo e progetto piccoli sotto.
 function taskRow(t) {
   const w = who(t.who);
   const k = `data-who="${esc(t.who)}" data-code="${esc(t.code)}"`;
+  const editing = S.taskEdit && S.taskEdit.who === t.who && S.taskEdit.code === t.code;
   return `<div class="entry" style="--client:${w.color}">
     <div class="code strong">${esc(t.code)}</div>
     <div class="hrs">${fmt(t.hours)} h</div>
+    ${t.title && !editing ? `<div class="tsub ttl">${esc(t.title)}</div>` : ''}
     <div class="who sub"><span class="dot"></span>${esc(w.name)}</div>
-    <div class="ops">
+    ${editing ? titleFormHtml(t) : `<div class="ops">
+      <button class="link" data-act="edittitle" ${k}>${t.title ? 'Cambia titolo' : 'Aggiungi titolo'}</button>
       ${t.done_at
         ? `<button class="link" data-act="reopentask" ${k}>Riapri</button>`
         : `<button class="link" data-act="donetask" ${k}>Termina</button>${t.hours === 0 ? `<button class="link" data-act="deltask" ${k}>Elimina</button>` : ''}`}
-    </div>
+    </div>`}
   </div>`;
+}
+
+async function saveTitle() {
+  const f = S.taskEdit;
+  if (!f || S.busy) return;
+  const title = normalizeTitle(f.title);
+  if (title.length > TITLE_MAX) { f.error = `Il titolo può avere al massimo ${TITLE_MAX} caratteri.`; render(); document.getElementById('t-title')?.focus(); return; }
+  S.busy = true;
+  try {
+    const { queued } = await sync.setTaskTitle(f.who, f.code, title || null);
+    S.taskEdit = null;
+    await refreshTasks();
+    render();
+    const later = queued ? ' Lo invio appena torna la connessione.' : '';
+    toast(title ? `Titolo di ${f.code} salvato.${later}` : `Titolo di ${f.code} tolto.${later}`);
+  } catch { toast('Non sono riuscito a salvare il titolo. Riprova.'); }
+  S.busy = false;
 }
 
 function projectRow(p) {
@@ -144,6 +181,13 @@ async function removeProject(id) {
 }
 
 export const actions = {
+  edittitle: b => {
+    const t = S.tasks.find(x => x.who === b.dataset.who && x.code === b.dataset.code);
+    S.taskEdit = { who: t.who, code: t.code, title: t.title || '', error: '' };
+    render();
+    document.getElementById('t-title')?.focus();
+  },
+  canceltitle: () => { S.taskEdit = null; render(); },
   donetask: b => changeTask('done', b.dataset.who, b.dataset.code),
   reopentask: b => changeTask('reopen', b.dataset.who, b.dataset.code),
   deltask: b => changeTask('remove', b.dataset.who, b.dataset.code),
@@ -167,8 +211,9 @@ export const actions = {
 
 export function onInput(t) {
   if (t.id === 'p-name' && S.projectForm) S.projectForm.name = t.value;
+  if (t.id === 't-title' && S.taskEdit) S.taskEdit.title = t.value;
 }
 export function onChange(t) {
   if (t.name === 'pcolor' && S.projectForm) S.projectForm.color = t.value;
 }
-export const onSubmit = { 'project-form': saveProject };
+export const onSubmit = { 'project-form': saveProject, 'title-form': saveTitle };

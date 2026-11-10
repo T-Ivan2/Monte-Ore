@@ -1,6 +1,6 @@
 // Vista Mese: monte ore, calendario ed export in Excel.
 import { ABSENCES, DOW, MONTHS, fmt, parse, monday, weekDays, holidayName, monthDays, shiftMonth, dayLength, incompleteDays } from '../logic.js';
-import { S, today, dayTotal, target, offLabel, who, names, ensure } from '../state.js';
+import { S, today, dayTotal, target, offLabel, who, names, taskTitles, ensure } from '../state.js';
 import { esc, toast, loadFail, ICON, dow, hoursText, dayState } from '../ui.js';
 import { render } from '../render.js';
 import { go } from './day.js';
@@ -76,7 +76,7 @@ export const actions = {
     b.disabled = true;
     try {
       const { exportMonth } = await import('../export.js');
-      const r = await exportMonth(inMonth(), S.month, monthTarget(), dayLength(S.dayHours), names());
+      const r = await exportMonth(inMonth(), S.month, monthTarget(), dayLength(S.dayHours), names(), taskTitles());
       if (r === 'downloaded') toast('File Excel scaricato.');
     } catch { toast('Non sono riuscito a creare il file Excel. Riprova.'); }
     b.disabled = false;

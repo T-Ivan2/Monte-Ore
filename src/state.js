@@ -31,7 +31,8 @@ export const S = {
   lastSeenDay: today(),
   panel: null, // 'hours' | 'notif' | null
   hoursError: '',
-  projectForm: null // { id: null per un nuovo progetto, name, color, errors }
+  projectForm: null, // { id: null per un nuovo progetto, name, color, errors }
+  taskEdit: null // { who, code, title, error }: titolo di una task in modifica nella scheda Task
 };
 
 export const dayEntries = d => S.entries.filter(e => e.day === d);
@@ -50,6 +51,9 @@ export function who(id) {
 }
 export const names = () => Object.fromEntries([...S.projects, ...ABSENCES].map(w => [w.id, w.name]));
 
+// Titolo di ogni task, per chiave "progetto|codice" (Excel e liste).
+export const taskTitles = () => Object.fromEntries(S.tasks.filter(t => t.title).map(t => [`${t.who}|${t.code}`, t.title]));
+export const taskOf = (id, code) => S.tasks.find(t => t.who === id && t.code === code);
 export const openTasks = id => S.tasks.filter(t => t.who === id && !t.done_at);
 // Con una sola task aperta la propone già selezionata. Senza task aperte chiede il codice.
 export function taskChoice(id) {

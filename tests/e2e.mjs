@@ -343,6 +343,62 @@ const s1 = await serve('dist', 4301);
   await p.setInputFiles('#restore-file', `${OUT}/non-backup.json`);
   await p.waitForFunction(() => /non è un backup di Monte Ore/.test(document.getElementById('toast').textContent));
 }
+{
+  // Titolo delle task: fisso per la task, in primo piano quando si registrano le ore, sotto il codice quando si consulta
+  const [p] = await page('', { viewport: { width: 390, height: 844 }, colorScheme: 'light' });
+  await p.goto('http://localhost:4301/');
+  await p.waitForSelector('#entry-form');
+  await p.fill('#f-code', 'task0001'); await p.fill('#f-title', '  Analisi   requisiti '); await p.fill('#f-hours', '3');
+  await p.click('#add-desc'); await p.fill('#f-desc', 'Prima riunione');
+  await p.click('#save');
+  await p.waitForSelector('.entry');
+  // Nel giorno: codice in primo piano, titolo e progetto piccoli sotto
+  assert.equal(await p.textContent('.entry .who .code'), 'TASK0001');
+  assert.equal((await p.textContent('.entry .tsub')).trim(), 'Analisi requisiti · Shüco');
+  // Registrando: titolo in primo piano, codice piccolo sotto
+  assert.equal(await p.textContent('.taskopt .tt'), 'Analisi requisiti');
+  assert.equal(await p.textContent('.taskopt .tc'), 'TASK0001');
+  // Altre ore sulla stessa task con un commento diverso: il titolo resta quello
+  await p.fill('#f-hours', '2'); await p.click('#add-desc'); await p.fill('#f-desc', 'Revisione documento'); await p.click('#save');
+  await p.waitForFunction(() => document.querySelectorAll('.entry').length === 2);
+  assert.deepEqual(await p.$$eval('.entry .tsub', els => els.map(e => e.textContent.trim())), ['Analisi requisiti · Shüco', 'Analisi requisiti · Shüco']);
+  // Titolo troppo lungo rifiutato su una nuova task
+  await p.click('#new-task'); await p.fill('#f-code', 'TASK0002');
+  await p.evaluate(() => { const i = document.getElementById('f-title'); i.removeAttribute('maxlength'); });
+  await p.fill('#f-title', 'x'.repeat(81)); await p.fill('#f-hours', '1'); await p.click('#save');
+  assert.match(await p.textContent('#e-title'), /80/);
+  await p.click('#pick-task');
+
+  // Scheda Task: cambia e togli il titolo
+  await p.click('#tab-tasks');
+  await p.waitForSelector('[data-act=edittitle]');
+  assert.match(await p.textContent('#app .list'), /TASK0001[\s\S]*Analisi requisiti/);
+  await p.click('[data-act=edittitle][data-code=TASK0001]');
+  assert.equal(await p.inputValue('#t-title'), 'Analisi requisiti');
+  await p.fill('#t-title', 'Analisi requisiti v2'); await p.click('#t-save');
+  await p.waitForFunction(() => /Titolo di TASK0001 salvato/.test(document.getElementById('toast').textContent));
+  assert.match(await p.textContent('#app .list'), /Analisi requisiti v2/);
+  await p.screenshot({ path: `${OUT}/task-titolo.png`, fullPage: true });
+  await p.click('#tab-day');
+  assert.match(await p.textContent('.entry .tsub'), /Analisi requisiti v2/);
+  await p.screenshot({ path: `${OUT}/giorno-titolo.png`, fullPage: true });
+
+  // Excel: colonna con il titolo
+  await p.click('#tab-month'); await p.waitForSelector('.bankfig');
+  const [dl] = await Promise.all([p.waitForEvent('download'), p.click('#export-xlsx')]);
+  const strings = execSync(`python3 -c "import zipfile,sys; print(zipfile.ZipFile(sys.argv[1]).read('xl/sharedStrings.xml').decode())" ${await dl.path()}`).toString();
+  assert.match(strings, /Titolo task/);
+  assert.match(strings, /Analisi requisiti v2/);
+
+  await p.click('#tab-tasks');
+  await p.click('[data-act=edittitle][data-code=TASK0001]');
+  await p.fill('#t-title', '   '); await p.click('#t-save');
+  await p.waitForFunction(() => /Titolo di TASK0001 tolto/.test(document.getElementById('toast').textContent));
+  await p.click('#tab-day');
+  assert.equal(await p.textContent('.taskopt .tt.tcode'), 'TASK0001');
+  assert.equal((await p.textContent('.entry .tsub')).trim(), 'Shüco');
+  assert.equal(await p.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
+}
 process.kill(-s1.pid);
 
 // Supabase simulato: verifica login e forma delle richieste.

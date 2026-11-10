@@ -3,10 +3,13 @@
 //   { op: 'add', row }            voce nuova, con id già assegnato sul dispositivo
 //   { op: 'update', id, patch }   modifica di una voce
 //   { op: 'remove', id }          eliminazione di una voce
+//   { op: 'title', who, code, title }  titolo di una task (null lo toglie)
 
 // Aggiunge un'operazione fondendola con quelle in attesa sulla stessa voce. Non modifica la coda ricevuta.
 export function enqueue(queue, op) {
   if (op.op === 'add') return [...queue, op];
+  // Del titolo conta solo l'ultimo: sostituisce quello in attesa, ma resta dopo la voce che crea la task.
+  if (op.op === 'title') return [...queue.filter(q => !(q.op === 'title' && q.who === op.who && q.code === op.code)), op];
   const pendingAdd = queue.find(q => q.op === 'add' && q.row.id === op.id);
   if (op.op === 'update') {
     if (pendingAdd) return queue.map(q => q === pendingAdd ? { op: 'add', row: { ...q.row, ...op.patch } } : q);
@@ -32,11 +35,17 @@ export function overlay(entries, queue) {
   }
   return out;
 }
+const isTitleOp = q => q.op === 'title';
 
 // Le task nascono e si riaprono sul server quando si registrano ore: offline lo simula per le voci nuove.
 export function overlayTasks(tasks, queue) {
   const out = tasks.map(t => ({ ...t }));
   for (const q of queue) {
+    if (isTitleOp(q)) {
+      const t = out.find(x => x.who === q.who && x.code === q.code);
+      if (t) t.title = q.title;
+      continue;
+    }
     if (q.op !== 'add' || !q.row.code) continue;
     const t = out.find(x => x.who === q.row.who && x.code === q.row.code);
     if (t) { t.hours += q.row.hours; t.done_at = null; if (!t.last_day || q.row.day > t.last_day) t.last_day = q.row.day; }
@@ -56,6 +65,7 @@ export async function flush(queue, api, isNetworkError) {
       if (q.op === 'add') await api.add(q.row);
       if (q.op === 'update') await api.update(q.id, q.patch);
       if (q.op === 'remove') await api.remove(q.id);
+      if (q.op === 'title') await api.title(q.who, q.code, q.title);
       applied += 1;
     } catch (err) {
       if (isNetworkError(err)) return { remaining: queue.slice(i), applied, failed };

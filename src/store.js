@@ -90,6 +90,8 @@ function supabaseStore() {
       must(await db.from('tasks').update({ done_at: done ? new Date().toISOString() : null }).eq('who', who).eq('code', code));
     },
     async removeTask(who, code) { must(await db.from('tasks').delete().eq('who', who).eq('code', code)); },
+    // Titolo della task: null lo toglie. La task nasce con la prima voce, quindi si imposta dopo.
+    async setTaskTitle(who, code, title) { must(await db.from('tasks').update({ title: title || null }).eq('who', who).eq('code', code)); },
     async getSettings() { return readThrough('settings', () => this.readSettings()); },
     async readSettings() {
       const row = must(await db.from('reminder_settings').select('times, day_hours').maybeSingle());
@@ -181,6 +183,10 @@ function localStore() {
       write(s);
     },
     async removeTask(who, code) { const s = read(); s.tasks = s.tasks.filter(t => !(t.who === who && t.code === code)); write(s); },
+    async setTaskTitle(who, code, title) {
+      const s = read(), t = s.tasks.find(x => x.who === who && x.code === code);
+      if (t) { t.title = title || null; write(s); }
+    },
     async getSettings() { const s = read(); return { times: s.times, dayHours: s.dayHours }; },
     async setTimes(times) { const s = read(); s.times = times; write(s); },
     async setDayHours(dayHours) { const s = read(); s.dayHours = dayHours; write(s); },
