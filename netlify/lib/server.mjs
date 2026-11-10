@@ -35,7 +35,7 @@ export async function loadQuickContext(db, userId, day) {
   const [entries, tasks, projects, settings] = await Promise.all([
     db.from('entries').select('day, who, hours, code, description, created_at').eq('user_id', userId)
       .gte('day', from.toISOString().slice(0, 10)).lte('day', day),
-    db.from('tasks').select('who, code, done_at').eq('user_id', userId),
+    db.from('tasks').select('who, code, done_at, title').eq('user_id', userId),
     db.from('projects').select('id, name, archived_at').eq('user_id', userId),
     db.from('reminder_settings').select('day_hours').eq('user_id', userId).maybeSingle()
   ]);

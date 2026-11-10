@@ -30,6 +30,7 @@ const actions = {
   view: async b => {
     S.view = b.dataset.view;
     S.projectForm = null;
+    S.taskEdit = null;
     try {
       if (S.view === 'month') { S.month = S.selected.slice(0, 7); await ensure(monthDays(S.month)); }
       if (S.view === 'tasks') await Promise.all([refreshTasks(), refreshProjects()]);

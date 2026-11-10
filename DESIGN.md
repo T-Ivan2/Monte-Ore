@@ -201,6 +201,9 @@ Angoli morbidi a tre misure: 16px per i riquadri, 12px per controlli, chip e cel
 - **Selected:** bordo Inchiostro da 2px, sfondo Nebbia e segno di spunta. Il colore del progetto resta nel quadratino.
 - **Nuova task:** bordo tratteggiato con icona "+".
 
+### Task: scegliere e consultare
+La gerarchia segue il gesto. **Registrando** si sceglie per significato: elenco a tutta larghezza con il titolo (Body 600) in primo piano e il codice (Code 13px, Ardesia) sotto. **Consultando** (voci del giorno, scheda Task) si legge per codice: codice in primo piano (Code 600) e sotto, piccoli, titolo in Inchiostro e progetto in Ardesia. Senza titolo si mostra solo il codice. Il titolo si modifica dentro la riga della task, mai in una finestra a parte.
+
 ### Cards / Containers
 - **Corner Style:** 16px.
 - **Background:** Superficie.

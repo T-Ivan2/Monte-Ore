@@ -28,6 +28,8 @@ describe('azioni rapide: regole', () => {
       { kind: 'copy', title: 'Copia da mar 3 · 8 h' },
       { kind: 'fill', who: 'inpeco', code: 'T1', title: '+8 h su T1' }
     ]);
+    const titled = tasks.map(t => t.code === 'T1' ? { ...t, title: 'Analisi requisiti' } : t);
+    expect(planQuickActions({ day: '2026-11-04', missing: 8, entries, tasks: titled, projects })[1].title).toBe('+8 h su Analisi requisiti');
     const partial = [...entries, e('2026-11-04', 'inpeco', 3, 'T1')];
     expect(planQuickActions({ day: '2026-11-04', missing: 5, entries: partial, tasks, projects })).toEqual([
       { kind: 'fill', who: 'inpeco', code: 'T1', title: '+5 h su T1' }
@@ -87,6 +89,10 @@ describe('azioni rapide: esecuzione', () => {
     expect(await runQuickLog(deps, fill)).toEqual({ ok: true, message: 'La giornata è già completa.' });
     expect(inserted).toHaveLength(1);
     expect(inserted[0]).toMatchObject({ day: '2026-11-04', who: 'inpeco', code: 'T1', hours: 5 });
+  });
+  it('usa il titolo della task nel messaggio di conferma', async () => {
+    const { deps } = setup([], { tasks: tasks.map(t => t.code === 'T1' ? { ...t, title: 'Analisi requisiti' } : t) });
+    expect((await runQuickLog(deps, fill)).message).toBe('Registrate 8 h su Analisi requisiti · T1 (Inpeco).');
   });
   it('usa le ore previste dell\'utente', async () => {
     const { inserted, deps } = setup([], { dayHours: [8, 8, 6, 8, 8] });

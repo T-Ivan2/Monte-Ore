@@ -113,6 +113,15 @@ export function parseHours(raw) {
   return Number.isFinite(n) ? n : NaN;
 }
 // Restituisce gli errori da mostrare e i valori normalizzati da salvare.
+// Titolo di una task: facoltativo, spazi ripuliti, al massimo 80 caratteri. Stringa vuota = nessun titolo.
+export const TITLE_MAX = 80;
+export const normalizeTitle = raw => String(raw ?? '').trim().replace(/\s+/g, ' ');
+// Nome breve per spazi stretti (pulsanti delle notifiche): titolo se c'è, altrimenti codice.
+export const taskLabel = (task, max = 24) => {
+  const name = task?.title || task?.code || '';
+  return name.length > max ? `${name.slice(0, max - 1).trimEnd()}…` : name;
+};
+
 export function validateEntry(draft, otherHours = 0) {
   const errors = {};
   const isProject = draft.kind === 'project';
@@ -122,11 +131,14 @@ export function validateEntry(draft, otherHours = 0) {
     if (!code) errors.code = draft.newTask === false ? 'Scegli una task o aggiungine una nuova.' : 'Inserisci il codice della task ServiceNow.';
     else if (code.length > 40) errors.code = 'Il codice può avere al massimo 40 caratteri.';
   }
+  // Il titolo si scrive solo creando una task nuova; per le task esistenti si cambia dalla scheda Task.
+  const title = isProject && draft.newTask ? normalizeTitle(draft.title) : '';
+  if (title.length > TITLE_MAX) errors.title = `Il titolo può avere al massimo ${TITLE_MAX} caratteri.`;
   const hours = parseHours(draft.hours);
   if (!Number.isFinite(hours) || hours <= 0) errors.hours = 'Inserisci un numero di ore maggiore di zero.';
   else if ((hours * 2) % 1 !== 0) errors.hours = "Inserisci le ore a blocchi di mezz'ora, ad esempio 7,5.";
   else if (hours + otherHours > 24) errors.hours = 'Una giornata non può superare le 24 ore.';
-  return { errors, value: { who: draft.who, hours, code, description: draft.desc.trim() } };
+  return { errors, value: { who: draft.who, hours, code, description: draft.desc.trim() }, taskTitle: title || null };
 }
 
 // Data e ora in Italia, indipendenti dal fuso del server.
@@ -179,6 +191,9 @@ export function planQuickActions({ day, missing, entries, tasks, projects }) {
     if (src) out.push({ kind: 'copy', title: `Copia da ${shortDay(src.day)} · ${fmt(src.rows.reduce((n, e) => n + e.hours, 0))} h` });
   }
   const task = missing > 0 ? lastOpenTask(entries.filter(e => e.day <= day), tasks, projects) : null;
-  if (task) out.push({ kind: 'fill', ...task, title: `+${fmt(missing)} h su ${task.code}` });
+  if (task) {
+    const full = tasks.find(t => t.who === task.who && t.code === task.code);
+    out.push({ kind: 'fill', ...task, title: `+${fmt(missing)} h su ${taskLabel({ ...task, title: full?.title })}` });
+  }
   return out.slice(0, 2);
 }

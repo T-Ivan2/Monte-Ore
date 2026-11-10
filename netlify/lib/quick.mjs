@@ -42,7 +42,8 @@ export async function runQuickLog({ loadContext, insertEntries }, claims) {
       return { ok: false, message: `${claims.code} non è più aperta: apri l'app per scegliere la task.` };
     }
     await insertEntries(userId, [{ day, who: claims.who, hours: missing, code: claims.code, description: '' }]);
-    return { ok: true, message: `Registrate ${fmt(missing)} h su ${claims.code} (${project.name}).` };
+    const name = task.title ? `${task.title} · ${claims.code}` : claims.code;
+    return { ok: true, message: `Registrate ${fmt(missing)} h su ${name} (${project.name}).` };
   }
 
   return { ok: false, message: 'Azione sconosciuta: apri l\'app.' };

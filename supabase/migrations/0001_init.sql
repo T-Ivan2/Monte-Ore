@@ -55,12 +55,20 @@ drop trigger if exists entries_touch_task on public.entries;
 create trigger entries_touch_task after insert or update on public.entries
   for each row execute function public.entries_touch_task();
 
-create or replace view public.task_hours with (security_invoker = on) as
-  select t.who, t.code, t.done_at, t.created_at,
-         coalesce(sum(e.hours), 0) as hours, max(e.day) as last_day
-  from public.tasks t
-  left join public.entries e on e.user_id = t.user_id and e.who = t.who and e.code = t.code
-  group by t.user_id, t.who, t.code, t.done_at, t.created_at;
+-- Si crea solo se manca: le migrazioni successive la ampliano (la 0003 aggiunge il titolo)
+-- e rieseguire la 0001 non deve riportarla indietro, cosa che PostgreSQL rifiuterebbe.
+do $$ begin
+  if not exists (select 1 from pg_views where schemaname = 'public' and viewname = 'task_hours') then
+    execute $v$
+      create view public.task_hours with (security_invoker = on) as
+        select t.who, t.code, t.done_at, t.created_at,
+               coalesce(sum(e.hours), 0) as hours, max(e.day) as last_day
+        from public.tasks t
+        left join public.entries e on e.user_id = t.user_id and e.who = t.who and e.code = t.code
+        group by t.user_id, t.who, t.code, t.done_at, t.created_at
+    $v$;
+  end if;
+end $$;
 
 -- Impostazioni dell'utente: orari dei promemoria e ore previste da lunedì a venerdì.
 create table if not exists public.reminder_settings (

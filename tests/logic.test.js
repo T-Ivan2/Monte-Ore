@@ -1,7 +1,7 @@
 import { readFileSync, readdirSync } from 'node:fs';
 import { describe, it, expect } from 'vitest';
 import { PGlite } from '@electric-sql/pglite';
-import { holidayName, monthDays, monday, validateEntry, romeNow, dueTimes, fmt, targetFor, validDayHours, dayLength, slugify, validateProject, colorVar } from '../src/logic.js';
+import { holidayName, monthDays, monday, validateEntry, romeNow, dueTimes, fmt, targetFor, validDayHours, dayLength, slugify, validateProject, colorVar, normalizeTitle, taskLabel } from '../src/logic.js';
 import { buildSheets } from '../src/export.js';
 import { runReminders } from '../netlify/lib/reminders.mjs';
 
@@ -79,6 +79,17 @@ describe('validazione voce', () => {
     expect(validateEntry({ ...base, code: 'inc 12-a' }).value.code).toBe('INC12-A');
     expect(validateEntry({ ...base, code: 'X' }).errors).toEqual({});
     expect(validateEntry({ ...base, code: 'A'.repeat(41) }).errors.code).toMatch(/40/);
+  });
+  it('restituisce a parte il titolo di una task nuova', () => {
+    const r = validateEntry({ ...base, newTask: true, title: '  Analisi   requisiti ' });
+    expect(r.taskTitle).toBe('Analisi requisiti');
+    expect(r.value).not.toHaveProperty('title');
+    expect(validateEntry({ ...base, newTask: false, title: 'Ignorato' }).taskTitle).toBeNull();
+    expect(validateEntry({ ...base, newTask: true, title: '   ' }).taskTitle).toBeNull();
+    expect(validateEntry({ ...base, newTask: true, title: 'x'.repeat(81) }).errors.title).toMatch(/80/);
+    expect(normalizeTitle(null)).toBe('');
+    expect(taskLabel({ code: 'T1', title: 'Analisi dei requisiti funzionali del cliente' })).toBe('Analisi dei requisiti f…');
+    expect(taskLabel({ code: 'T1', title: null })).toBe('T1');
   });
   it('non chiede il codice sulle assenze', () => {
     const { errors, value } = validateEntry({ kind: 'absence', who: 'ferie', code: 'X', hours: '8', desc: '' });
@@ -251,6 +262,25 @@ describe('schema database', () => {
     expect((await db.query('select who, code from tasks')).rows).toEqual([{ who: 'frau', code: 'T1' }]);
     expect(Number((await db.query('select hours from task_hours')).rows[0].hours)).toBe(3);
   });
+  it('salva il titolo delle task e lo mostra nella vista delle ore', async () => {
+    const db = await dbReady();
+    await as(db, U1);
+    await db.exec(ok);
+    await db.exec(`update tasks set title = 'Analisi requisiti' where code = 'TASK0048231'`);
+    expect((await db.query('select title, hours from task_hours')).rows.map(r => [r.title, Number(r.hours)])).toEqual([['Analisi requisiti', 7.5]]);
+    // Una nuova voce sulla stessa task non tocca il titolo.
+    await db.exec(`insert into entries (day, who, hours, code) values ('2026-11-05', 'inpeco', 1, 'TASK0048231')`);
+    expect((await db.query('select title from tasks')).rows[0].title).toBe('Analisi requisiti');
+    for (const bad of [`' spazi '`, `''`, `'${'x'.repeat(81)}'`]) {
+      await expect(db.exec(`update tasks set title = ${bad}`)).rejects.toThrow();
+    }
+    await db.exec(`update tasks set title = null`);
+    // Rieseguire la 0001 dopo la 0003 non riporta indietro la vista.
+    await db.exec('reset role;');
+    await db.exec(readFileSync('supabase/migrations/0001_init.sql', 'utf8'));
+    await as(db, U1);
+    expect(Object.keys((await db.query('select * from task_hours')).rows[0])).toContain('title');
+  });
   it('lega voci, task e progetti', async () => {
     const db = await dbReady();
     await as(db, U1);
@@ -313,6 +343,13 @@ describe('export', () => {
     const row = summary.data.find(r => r[0]?.value === 'Inpeco');
     expect(row[2].value).toBe(1);
     expect(summary.data.find(r => r[0]?.value === 'Ore previste')[2].value).toBe(20);
+  });
+  it('aggiunge il titolo delle task al dettaglio e al riepilogo', () => {
+    const [detail, summary] = buildSheets([{ day: '2026-11-04', who: 'inpeco', hours: 2, code: 'T1', description: '' }], 8, 8, undefined, { 'inpeco|T1': 'Analisi requisiti' });
+    expect(detail.data[0].map(c => c.value)).toContain('Titolo task');
+    expect(detail.data[1][5].value).toBe('Analisi requisiti');
+    expect(detail.data[1][6].value).toBe(2);
+    expect(summary.data.find(r => r[0]?.value === 'T1')[3].value).toBe('Analisi requisiti');
   });
   it('usa i nomi dei progetti dell\'utente', () => {
     const [detail, summary] = buildSheets([{ day: '2026-11-04', who: 'acme', hours: 2, code: 'A1', description: '' }], 8, 8, { acme: 'Acme srl' });

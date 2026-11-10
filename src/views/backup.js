@@ -48,6 +48,7 @@ async function restore(file, reload) {
     for (const p of plan.projects) await store.addProject(p);
     for (let i = 0; i < plan.entries.length; i += 500) await store.addEntries(plan.entries.slice(i, i + 500));
     for (const t of plan.doneTasks) await store.setTaskDone(t.who, t.code, true);
+    for (const t of plan.titles) await store.setTaskTitle(t.who, t.code, t.title);
     await reload();
     toast(`Ripristino completato: aggiunte ${what}.`);
   } catch (err) {

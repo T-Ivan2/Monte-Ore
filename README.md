@@ -118,6 +118,7 @@ Ogni pulsante porta un token firmato con una chiave ricavata da `VAPID_PRIVATE_K
 - La funzione dei promemoria gira ogni 5 minuti: un promemoria arriva entro qualche minuto dall'orario scelto. Se l'invio fallisce per un errore temporaneo viene ritentato al giro successivo, fino a 10 minuti dopo l'orario.
 - Il santo patrono locale non è un festivo automatico: registralo come assenza **Altro**.
 - Il codice ServiceNow è obbligatorio sui progetti, in qualsiasi formato. Una task si crea alla prima registrazione, resta selezionabile finché è aperta e, una volta terminata, resta nell'archivio con le sue ore. Registrare ore sul suo codice la riapre.
+- Ogni task può avere un **titolo** (facoltativo, al massimo 80 caratteri), che resta uguale in tutte le ore registrate su di essa; la descrizione invece è il commento della singola voce. Il titolo si scrive creando la task o, in qualsiasi momento, dalla scheda Task con **Aggiungi titolo** / **Cambia titolo**. Quando registri le ore vedi il titolo in grande e il codice sotto; nel giorno e nella scheda Task il codice in grande e il titolo sotto. Compare anche nell'Excel, nel backup e nei pulsanti delle notifiche.
 - Su un giorno vuoto, **Copia da…** ripete le voci dell'ultimo giorno compilato nella settimana precedente. Le voci su task terminate non vengono copiate.
 - Quando pubblichi una nuova versione, l'app aperta mostra **Nuova versione disponibile**: toccalo per ricaricare.
 - Nel weekend l'app si apre sul venerdì se è incompleto, altrimenti sul lunedì successivo.
