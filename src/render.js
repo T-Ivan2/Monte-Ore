@@ -1,7 +1,7 @@
 // Struttura della pagina e scelta della vista da disegnare.
 import { S } from './state.js';
 import { isLocal } from './store.js';
-import { esc } from './ui.js';
+import { esc, ICON, MARK } from './ui.js';
 import { renderDay } from './views/day.js';
 import { renderTasks } from './views/tasks.js';
 import { renderMonth } from './views/month.js';
@@ -13,7 +13,7 @@ const root = document.getElementById('root');
 
 export function renderLogin(message = '') {
   root.innerHTML = `<main class="wrap narrow">
-    <h1>Monte Ore</h1>
+    <h1 class="brand">${MARK}Monte Ore</h1>
     <form id="login-form" novalidate>
       <div class="field"><label class="lbl" for="email">Email</label><input class="input" id="email" type="email" autocomplete="username" required></div>
       <div class="field"><label class="lbl" for="password">Password</label><input class="input" id="password" type="password" autocomplete="current-password" required></div>
@@ -30,7 +30,7 @@ export function renderLogin(message = '') {
 // Richiesta del link per scegliere una nuova password.
 export function renderReset({ message = '', sent = false } = {}) {
   root.innerHTML = `<main class="wrap narrow">
-    <h1>Monte Ore</h1>
+    <h1 class="brand">${MARK}Monte Ore</h1>
     <form id="reset-form" novalidate>
       <h2 class="formtitle">Recupera la password</h2>
       ${sent
@@ -49,7 +49,7 @@ export function renderReset({ message = '', sent = false } = {}) {
 // Dopo il link della mail: nuova password.
 export function renderNewPassword(message = '') {
   root.innerHTML = `<main class="wrap narrow">
-    <h1>Monte Ore</h1>
+    <h1 class="brand">${MARK}Monte Ore</h1>
     <form id="password-form" novalidate>
       <h2 class="formtitle">Scegli una nuova password</h2>
       <div class="field"><label class="lbl" for="new-password">Nuova password <span>(almeno 8 caratteri)</span></label><input class="input" id="new-password" type="password" autocomplete="new-password" minlength="8" required></div>
@@ -63,7 +63,7 @@ export function renderNewPassword(message = '') {
 export function renderShell() {
   root.innerHTML = `<div class="wrap">
     <header>
-      <h1>Monte Ore</h1>
+      <h1 class="brand">${MARK}Monte Ore</h1>
       <div class="row">
         <button class="quiet" data-act="hours" id="hours-toggle" aria-expanded="false"></button>
         <button class="quiet" data-act="notif" id="notif-toggle" aria-expanded="false"></button>
@@ -73,9 +73,9 @@ export function renderShell() {
     <section class="panel" id="notif-panel" aria-label="Notifiche" hidden></section>
     <main class="app">
     <div class="tabs" role="tablist" aria-label="Vista">
-      <button role="tab" id="tab-day" data-act="view" data-view="day" aria-controls="app">Giorno</button>
-      <button role="tab" id="tab-tasks" data-act="view" data-view="tasks" aria-controls="app">Task</button>
-      <button role="tab" id="tab-month" data-act="view" data-view="month" aria-controls="app">Mese</button>
+      <button role="tab" id="tab-day" data-act="view" data-view="day" aria-controls="app">${ICON.day}<span>Giorno</span></button>
+      <button role="tab" id="tab-tasks" data-act="view" data-view="tasks" aria-controls="app">${ICON.tasks}<span>Task</span></button>
+      <button role="tab" id="tab-month" data-act="view" data-view="month" aria-controls="app">${ICON.month}<span>Mese</span></button>
     </div>
     <p class="syncbar" id="sync" role="status" hidden></p>
     <div id="app" class="app" role="tabpanel"></div>

@@ -37,7 +37,9 @@ export function renderNotif() {
   if (!t) return;
   const open = S.panel === 'notif';
   t.setAttribute('aria-expanded', open);
-  t.innerHTML = `${BELL}${S.times.length === 0 ? 'Notifiche spente' : `<span class="sr">Promemoria: </span><b>${S.times.length <= 2 ? S.times.join(', ') : S.times.length + ' orari'}</b>`}`;
+  // Sul telefono si vede solo quanti orari ci sono; il testo completo resta per i lettori vocali.
+  const text = S.times.length === 0 ? 'Notifiche spente' : `<span class="sr">Promemoria: </span><b>${S.times.length <= 2 ? S.times.join(', ') : S.times.length + ' orari'}</b>`;
+  t.innerHTML = `${BELL}<span class="times-text">${text}</span><b class="short" aria-hidden="true">${S.times.length}</b>`;
   const p = document.getElementById('notif-panel');
   p.hidden = !open;
   if (!open) return;

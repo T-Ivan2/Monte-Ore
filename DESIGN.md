@@ -2,12 +2,17 @@
 name: Monte Ore
 description: Il cartellino delle ore di un consulente, da compilare in pochi secondi dal telefono.
 colors:
-  ink: "#15212C"
-  muted: "#566673"
-  paper: "#F1F4F6"
+  ink: "#10202A"
+  muted: "#52636D"
+  paper: "#EDF1F2"
   surface: "#FFFFFF"
-  soft: "#E6EBEF"
-  line: "#D5DDE3"
+  soft: "#E2E9EC"
+  line: "#D2DBDF"
+  accent: "#0B6477"
+  on-accent: "#FFFFFF"
+  hero: "#0B2E3A"
+  hero-ink: "#FFFFFF"
+  hero-muted: "#B9D7DE"
   ok: "#1A6E45"
   warn: "#9A5B00"
   error: "#B3261E"
@@ -20,10 +25,18 @@ colors:
   project-magenta: "#A8327A"
   project-green: "#4A7A1C"
   project-azure: "#1F6F99"
-  night-paper: "#10171D"
-  night-surface: "#18222A"
-  night-ink: "#E8EEF2"
+  night-paper: "#0C1418"
+  night-surface: "#152128"
+  night-ink: "#E6EEF1"
+  night-accent: "#62C6D8"
+  night-hero: "#0F3C4B"
 typography:
+  figure-hero:
+    fontFamily: "Familjen Grotesk, Segoe UI, system-ui, sans-serif"
+    fontSize: "46px"
+    fontWeight: 700
+    lineHeight: 1
+    letterSpacing: "-0.02em"
   headline:
     fontFamily: "Familjen Grotesk, Segoe UI, system-ui, sans-serif"
     fontSize: "22px"
@@ -35,6 +48,10 @@ typography:
     fontWeight: 700
     lineHeight: 1.1
     letterSpacing: "-0.01em"
+  figure:
+    fontFamily: "Familjen Grotesk, Segoe UI, system-ui, sans-serif"
+    fontSize: "18px"
+    fontWeight: 700
   title:
     fontFamily: "Familjen Grotesk, Segoe UI, system-ui, sans-serif"
     fontSize: "16px"
@@ -49,31 +66,26 @@ typography:
     fontFamily: "IBM Plex Sans, Segoe UI, system-ui, sans-serif"
     fontSize: "14px"
     fontWeight: 600
-  figure:
-    fontFamily: "IBM Plex Sans, Segoe UI, system-ui, sans-serif"
-    fontSize: "17px"
-    fontWeight: 600
-    fontFeature: "tnum"
   code:
     fontFamily: "IBM Plex Mono, ui-monospace, Menlo, Consolas, monospace"
     fontSize: "14px"
     fontWeight: 500
 rounded:
   control: "12px"
-  card: "16px"
+  card: "18px"
+  hero: "22px"
   pill: "999px"
 spacing:
   xs: "4px"
   sm: "8px"
   md: "12px"
-  lg: "16px"
-  xl: "20px"
+  lg: "18px"
 components:
   button-primary:
-    backgroundColor: "{colors.ink}"
-    textColor: "{colors.surface}"
+    backgroundColor: "{colors.accent}"
+    textColor: "{colors.on-accent}"
     rounded: "{rounded.pill}"
-    padding: "9px 22px"
+    padding: "9px 24px"
     height: "44px"
   button-secondary:
     backgroundColor: "transparent"
@@ -81,13 +93,13 @@ components:
     rounded: "{rounded.control}"
     padding: "9px 16px"
     height: "44px"
-  chip:
-    backgroundColor: "transparent"
-    textColor: "{colors.ink}"
-    rounded: "{rounded.control}"
-    padding: "8px 12px"
-  chip-selected:
+  button-mini:
     backgroundColor: "{colors.soft}"
+    textColor: "{colors.ink}"
+    rounded: "{rounded.pill}"
+    padding: "5px 12px"
+  chip-selected:
+    backgroundColor: "{colors.surface}"
     textColor: "{colors.ink}"
     rounded: "{rounded.control}"
   input:
@@ -100,6 +112,11 @@ components:
     backgroundColor: "{colors.surface}"
     rounded: "{rounded.card}"
     padding: "16px"
+  hero:
+    backgroundColor: "{colors.hero}"
+    textColor: "{colors.hero-ink}"
+    rounded: "{rounded.hero}"
+    padding: "18px"
 ---
 
 # Design System: Monte Ore
@@ -108,134 +125,119 @@ components:
 
 **Creative North Star: "Il cartellino"**
 
-Monte Ore è il cartellino delle ore di una persona sola: si compila a fine giornata, dal telefono, spesso con una mano, e a fine mese deve tornare al minuto. Lo stile serve quella scena. Ogni schermata risponde prima di tutto a "quanto manca?", poi a "dove registro?", e il resto resta in secondo piano.
+Monte Ore è il cartellino delle ore di una persona sola: si compila a fine giornata, dal telefono, spesso con una mano, e a fine mese deve tornare al minuto. Ogni schermata risponde prima a "quanto manca?", poi a "dove registro?".
 
-È un'interfaccia da strumento ("Operate"): familiare, ordinata, densa quanto basta. Il carattere sta nei dettagli: i numeri sempre allineati, la striscia della settimana che dice lo stato a colpo d'occhio, i riquadri morbidi in leggero rilievo che rendono l'app accogliente senza farla sembrare un gioco. Il colore compare solo quando porta un'informazione: il progetto, lo stato del giorno, un errore.
+Due segni rendono l'app riconoscibile. Il primo è il **riquadro in evidenza**: una superficie petrolio scuro con le ore in grande, lo stato in un'etichetta e una barra con i colori dei progetti. Il secondo sono i **giorni a riempimento**: nella settimana e nel calendario ogni giorno si riempie dal basso in proporzione alle ore registrate, come un monte ore che cresce. Il resto è volutamente quieto: riquadri bianchi morbidi, un solo colore d'accento, colore pieno solo dove porta un'informazione.
 
 **Key Characteristics:**
-- Colore come informazione, mai come decorazione.
-- Cifre tabulari ovunque: le ore si leggono in colonna.
-- Riquadri morbidi senza bordo, controlli arrotondati, una sola azione a pillola per schermata.
-- Aree di tocco da 44 px sul telefono, compatte sul computer.
+- Un riquadro scuro per schermata dice lo stato; tutto il resto è chiaro e quieto.
+- I giorni si riempiono: verde quando completi, ambra quando manca o eccede.
+- Sul telefono la navigazione è in basso, a portata di pollice.
+- Cifre tabulari ovunque; i numeri importanti nel carattere dei titoli.
 - Tema chiaro e scuro equivalenti.
 
 ## Colors
 
-Palette fredda e sobria su carta grigio-azzurra; i colori pieni sono riservati ai progetti e agli stati.
+Palette "Petrolio": grigi freddi, un accento verde petrolio e colori pieni riservati a progetti e stati.
 
 ### Primary
-- **Inchiostro** (#15212C): testo principale, pulsante principale, giorno selezionato, barra del giorno mentre si riempie. Nel tema scuro diventa **Gesso** (#E8EEF2).
+- **Petrolio** (#0B6477; scuro #62C6D8): azione principale, selezione (bordo e spunta), scheda attiva, anello del giorno selezionato e di oggi, focus.
+- **Petrolio notte** (#0B2E3A; scuro #0F3C4B): fondo del riquadro in evidenza, dell'icona e del marchio. Sopra si usano bianco, Brina (#B9D7DE) per il testo secondario e le varianti chiare dei colori dei progetti.
 
 ### Neutral
-- **Carta** (#F1F4F6): sfondo della pagina. Scuro: #10171D.
-- **Superficie** (#FFFFFF): riquadri, modulo, liste. Scuro: #18222A.
-- **Nebbia** (#E6EBEF): seconda superficie: schede, segmenti, weekend e festivi, chip selezionati.
-- **Linea** (#D5DDE3): bordi dei controlli e separatori.
-- **Ardesia** (#566673): testo secondario, link, etichette di supporto.
+- **Inchiostro** (#10202A): testo. **Ardesia** (#52636D): testo secondario.
+- **Carta** (#EDF1F2): sfondo. **Superficie** (#FFFFFF): riquadri. **Nebbia** (#E2E9EC): seconda superficie (schede, segmenti, weekend, azioni nelle righe). **Linea** (#D2DBDF): bordi dei controlli.
 
 ### Stati
-- **Completo** (#1A6E45): giorno o mese completo.
-- **Mancano** (#9A5B00): ore mancanti o in più, giorni incompleti, offline.
-- **Errore** (#B3261E): solo errori dei campi.
-- **Assenza** (#7C8995): Ferie, Permesso, Altro.
+- **Completo** (#1A6E45) e **Mancano** (#9A5B00): riempimento dei giorni e messaggi. Nel riquadro in evidenza diventano #9BE8BC e #FFD08A.
+- **Errore** (#B3261E): errori dei campi e "Elimina".
 
 ### Progetti
-Otto colori, scelti dall'utente per ogni progetto (c1…c8 nel database): blu #2353BD, verde acqua #0B7F6E, rosso #B23F2B, viola #6B46C1, arancio #A15C00, magenta #A8327A, verde #4A7A1C, azzurro #1F6F99. Nel tema scuro hanno varianti chiare dedicate in `src/style.css`.
+Otto colori scelti dall'utente (c1…c8 nel database), con varianti chiare per tema scuro e riquadro in evidenza.
 
 ### Named Rules
-**La regola del quadratino.** Il colore di un progetto vive solo nel suo quadratino (9 px) e nelle barre del monte ore. Non colora mai selezioni, sfondi o testi: un progetto rosso non deve sembrare un errore.
+**La regola del colore del progetto.** Il colore di un progetto vive in tre posti: il quadratino, il riquadro delle ore (in tinta al 17%) e le barre. Non colora mai selezioni o testi: un progetto rosso non deve sembrare un errore.
 
-**La regola dello stato.** Verde e ambra dicono soltanto "completo" e "manca o eccede". Non si usano per altro.
+**La regola dello stato.** Verde e ambra dicono soltanto "completo" e "manca o eccede". Sui giorni sono un riempimento tenue con il numero in inchiostro, mai testo colorato su fondo colorato.
+
+**La regola dell'accento.** Il petrolio segna ciò che è attivo o selezionato e l'azione principale. Non decora.
 
 ## Typography
 
-**Display Font:** Familjen Grotesk (con Segoe UI, system-ui)
-**Body Font:** IBM Plex Sans (con Segoe UI, system-ui)
-**Code Font:** IBM Plex Mono, solo per i codici delle task ServiceNow
-
-**Character:** una grottesca compatta per i titoli e una sans tecnica e leggibile per tutto il resto, con cifre tabulari. Il monospaziato non è un costume "tecnico": si usa solo dove ogni carattere conta, cioè nei codici delle task.
+**Display Font:** Familjen Grotesk. **Body Font:** IBM Plex Sans. **Code Font:** IBM Plex Mono, solo per i codici delle task.
 
 ### Hierarchy
-- **Headline** (700, 22px, 1.2): giorno selezionato e mese ("Mercoledì 4 novembre", "Novembre 2026").
-- **Brand** (700, 20px, 1.1): "Monte Ore" nell'intestazione.
-- **Title** (700, 16px): titoli di pannelli e moduli.
-- **Body** (400, 16px, 1.45): testo, campi, pulsanti. Paragrafi entro 56ch.
-- **Label** (600, 14px): etichette dei campi e legende.
-- **Figure** (600, 17px, cifre tabulari): ore nella striscia, nelle voci e nel calendario; 26px per il totale del mese.
-- **Code** (Plex Mono 500, 14–15px): codici delle task.
+- **Figure hero** (700, 46px; 42px sul telefono): le ore del giorno e del mese nel riquadro in evidenza.
+- **Headline** (700, 22px): titoli di sezione e mese.
+- **Brand** (700, 20px): "Monte Ore".
+- **Figure** (700, 18px): ore nei giorni e nei riquadri delle righe.
+- **Title** (700, 16px): titoli di moduli e pannelli.
+- **Body** (400, 16px, 1.45): testo e campi. Paragrafi entro 56ch.
+- **Label** (600, 14px): etichette, legende, azioni nelle righe (13px).
+- **Code** (Plex Mono 500–600, 13–15px): codici delle task.
 
 ### Named Rules
-**La regola delle due voci.** Una famiglia per i titoli, una per tutto il resto. Il monospaziato resta confinato ai codici.
+**La regola delle due voci.** Una famiglia per titoli e numeri importanti, una per tutto il resto. Il monospaziato resta confinato ai codici.
 
 ## Layout
 
-Una colonna sola, larga al massimo 620px, con margini laterali di 16px (e la safe area del telefono). Ritmo verticale di 20px tra i blocchi principali e di 12–14px dentro i riquadri; i gruppi correlati restano stretti (6–8px). La settimana e il calendario sono griglie a 7 colonne; sul telefono le etichette si riducono, mai le aree di tocco. Nessuno scorrimento orizzontale fino a 320px.
+Una colonna, larga al massimo 640px, margini di 16px più la safe area. Ritmo di 18px tra i blocchi, 12–14px dentro i riquadri. Sotto i 720px le schede diventano una barra fissa in basso con icona ed etichetta; sopra, un segmento in alto. Il messaggio di conferma si sposta sopra la barra. Nessuno scorrimento orizzontale fino a 320px.
 
 ## Elevation & Depth
 
-Sistema ibrido: i contenitori (lista delle voci, modulo, monte ore, pannelli) sono riquadri senza bordo in leggero rilievo; i controlli (pulsanti, campi, chip) restano piatti con un bordo sottile. Ciò che galleggia (messaggi e avviso di nuova versione) ha un'ombra più marcata. Nel tema scuro la profondità viene soprattutto dalla superficie più chiara dello sfondo.
+I contenitori sono riquadri senza bordo in leggero rilievo; i controlli sono piatti con bordo sottile; il riquadro in evidenza si stacca per colore. Nel tema scuro la profondità viene dalla superficie più chiara dello sfondo.
 
 ### Shadow Vocabulary
-- **Riquadro** (`0 1px 2px rgb(15 30 45 / .06), 0 6px 18px rgb(15 30 45 / .07)`): liste, modulo, monte ore, pannelli.
-- **Chip** (`0 1px 2px rgb(15 30 45 / .08)`): giorni della striscia e riga di sincronizzazione.
-- **Galleggiante** (`0 6px 20px rgb(0 0 0 / .28)` e `0 10px 30px rgb(0 0 0 / .25)`): messaggio in basso e avviso in alto.
+- **Riquadro** (`0 1px 2px rgb(15 30 45 / .06), 0 8px 22px rgb(15 30 45 / .07)`): liste, modulo, pannelli, riquadro in evidenza.
+- **Chip** (`0 1px 2px rgb(15 30 45 / .09)`): giorni, pulsanti dell'intestazione, scheda attiva.
+- **Galleggiante** (`0 6px 20px rgb(0 0 0 / .28)`): messaggio di conferma e avviso di nuova versione.
 
 ### Named Rules
 **La regola del rilievo unico.** Un elemento ha un bordo oppure un'ombra, mai entrambi.
 
 ## Shapes
 
-Angoli morbidi a tre misure: 16px per i riquadri, 12px per controlli, chip e celle del calendario, pillola per l'azione principale di ogni riquadro ("Salva ore", "Accedi"). Le barre di avanzamento sono pillole sottili (6–8px). I quadratini dei progetti restano quadrati (raggio 2px): sono un segno, non un controllo.
+Angoli morbidi a quattro misure: 22px per il riquadro in evidenza, 18px per i riquadri, 12px per controlli e giorni, pillola per azione principale, etichette di stato e azioni nelle righe. Barre a pillola alte 10px.
 
 ## Components
 
+### Riquadro in evidenza
+Fondo Petrolio notte. In alto la data (o il mese), poi il numero in grande con "di N h" accanto e, a destra, l'etichetta di stato. Sotto, la barra: un tratto per voce nel colore del progetto. Uno solo per schermata.
+
+### Giorni a riempimento
+Settimana (alti 66px) e calendario (60px). Il fondo si riempie dal basso: tinta d'accento se il giorno è futuro e parziale, verde se completo, ambra se manca o eccede. Weekend e festivi su Nebbia. Il giorno selezionato e oggi hanno un anello d'accento da 2px; oggi anche un punto.
+
+### Righe
+Riquadro delle ore a sinistra (tinta del progetto), poi codice in primo piano con titolo e progetto sotto. Le voci del giorno sono pulsanti a tutta riga che aprono la modifica, con una freccia a destra; "Elimina" sta nel modulo di modifica. Nelle schede Task e Progetti le azioni sono pillole Nebbia sotto il testo.
+
 ### Buttons
-- **Shape:** 12px; il pulsante principale è una pillola.
-- **Primary:** inchiostro pieno con testo chiaro, 600, padding 9px 22px, alto 44px. Uno solo per riquadro.
-- **Secondary:** trasparente con bordo Linea, 500; al passaggio il bordo diventa Ardesia.
-- **Link:** testo Ardesia sottolineato a metà intensità; per azioni leggere (Modifica, Elimina, Termina, Backup).
-- **Icon:** frecce e chiusura come icone disegnate a tratto 2px, mai caratteri Unicode.
+- **Primary:** pillola d'accento, 44px; a tutta larghezza sul telefono. Uno per riquadro.
+- **Secondary:** bordo Linea, 12px.
+- **Wide:** superficie a tutta larghezza per "Aggiungi ore" e "Aggiungi progetto".
+- **Mini:** pillola Nebbia per le azioni nelle righe.
+- **Danger:** testo e bordo Errore, solo per "Elimina".
 
 ### Chips
-- **Style:** bordo Linea, 12px, alti 40px (44px sul telefono).
-- **Selected:** bordo Inchiostro da 2px, sfondo Nebbia e segno di spunta. Il colore del progetto resta nel quadratino.
-- **Nuova task:** bordo tratteggiato con icona "+".
-
-### Task: scegliere e consultare
-La gerarchia segue il gesto. **Registrando** si sceglie per significato: elenco a tutta larghezza con il titolo (Body 600) in primo piano e il codice (Code 13px, Ardesia) sotto. **Consultando** (voci del giorno, scheda Task) si legge per codice: codice in primo piano (Code 600) e sotto, piccoli, titolo in Inchiostro e progetto in Ardesia. Senza titolo si mostra solo il codice. Il titolo si modifica dentro la riga della task, mai in una finestra a parte.
-
-### Cards / Containers
-- **Corner Style:** 16px.
-- **Background:** Superficie.
-- **Shadow Strategy:** Riquadro (vedi sopra), senza bordo.
-- **Internal Padding:** 14–16px.
+Bordo Linea, 12px. Selezionato: bordo d'accento da 2px, velo d'accento e spunta. Le task sono un elenco a tutta larghezza con titolo in primo piano e codice sotto.
 
 ### Inputs / Fields
-- **Style:** bordo Linea, 12px, alti 44px, testo 16px (niente zoom automatico su iPhone).
-- **Focus:** contorno blu di 2px a 2px di distanza, su tutti gli elementi.
-- **Error:** bordo e messaggio Errore sotto il campo, collegato con `aria-describedby`.
+Bordo Linea, 12px, 44px, testo 16px. Il campo delle ore è grande (52px, 22px nel carattere dei titoli) tra due pulsanti Nebbia. Errore: bordo e messaggio collegato al campo.
 
 ### Navigation
-Schede Giorno, Task e Mese in un segmento Nebbia: quella attiva è una superficie in rilievo. Si usano anche da tastiera (frecce, Home, Fine).
-
-### Striscia della settimana
-Sette giorni con le ore sotto la data: verde se completo, ambra se manca o eccede, grigio pieno per weekend e festivi, un punto per oggi. Il giorno selezionato è pieno di Inchiostro.
-
-### Barra del giorno
-Sotto il titolo del giorno: Inchiostro mentre si riempie, verde a giornata completa, ambra oltre le ore previste.
+Giorno, Task, Mese con icona. Sul telefono barra in basso: l'attiva ha icona su pillola d'accento tenue ed etichetta d'accento. Si usa anche da tastiera (frecce, Home, Fine).
 
 ## Do's and Don'ts
 
 ### Do:
-- **Do** usare cifre tabulari (`font-variant-numeric: tabular-nums`) per ogni numero.
+- **Do** usare un solo riquadro in evidenza per schermata.
+- **Do** tenere il numero dei giorni in inchiostro sopra il riempimento.
 - **Do** tenere ogni controllo toccabile ad almeno 44px sul telefono.
-- **Do** dare a ogni pulsante con un nome abbreviato un nome completo per i lettori vocali che contenga il testo visibile.
 - **Do** verificare ogni modifica in tema chiaro e scuro, a 320px e a 390px.
-- **Do** lasciare vuoti i giorni futuri e liberi nel calendario: risaltano solo quelli incompleti.
+- **Do** mettere nel codice il testo prima delle ore nelle righe: i lettori vocali leggono prima che cosa, poi quanto.
 
 ### Don't:
-- **Don't** colorare selezioni, sfondi o barre di stato con il colore di un progetto.
+- **Don't** usare il colore di un progetto per selezioni o testi.
+- **Don't** usare l'accento come decorazione.
 - **Don't** usare il monospaziato fuori dai codici delle task.
 - **Don't** usare caratteri Unicode o emoji al posto delle icone.
-- **Don't** mettere più di un pulsante principale nello stesso riquadro.
 - **Don't** combinare bordo e ombra sullo stesso elemento.
