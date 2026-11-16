@@ -90,7 +90,9 @@ const s1 = await serve('dist', 4301);
   assert.match(await p.textContent('#strip-2026-11-04 .sr'), /9 ore, oltre le ore previste, oggi/);
   await p.click('#undo');
   await p.waitForFunction(() => /8 di 8 h/.test(document.querySelector('.state').textContent));
-  await p.click('[id^=remove-] >> nth=-1');
+  // Elimina sta dentro la modifica: si tocca la riga, poi Elimina.
+  await p.click('button.entry >> nth=-1');
+  await p.click('[id^=remove-]');
   await p.waitForFunction(() => /3 di 8 h/.test(document.querySelector('.state').textContent));
   await p.click('#undo');
   await p.waitForFunction(() => /8 di 8 h/.test(document.querySelector('.state').textContent));
@@ -147,6 +149,8 @@ const s1 = await serve('dist', 4301);
   await p.reload();
   await p.waitForSelector('.strip');
   assert.match(await p.textContent('#notif-toggle'), /3 orari/);
+  // Sul computer le schede restano in alto
+  assert.notEqual(await p.evaluate(() => getComputedStyle(document.querySelector('.tabs')).position), 'fixed');
 }
 {
   const [p] = await page('', { viewport: { width: 390, height: 844 }, colorScheme: 'dark' });
@@ -158,6 +162,11 @@ const s1 = await serve('dist', 4301);
   await p.waitForSelector('#entry-form');
   await p.fill('#f-code', 'TASK0048231'); await p.fill('#f-hours', '4'); await p.click('#save');
   await p.waitForSelector('.entry');
+  // Sul telefono le schede sono una barra in basso che non copre il contenuto in fondo alla pagina
+  assert.equal(await p.evaluate(() => getComputedStyle(document.querySelector('.tabs')).position), 'fixed');
+  await p.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+  assert.equal(await p.evaluate(() => document.getElementById('restore').getBoundingClientRect().bottom <= document.querySelector('.tabs').getBoundingClientRect().top), true);
+  await p.evaluate(() => window.scrollTo(0, 0));
   // Nessun avviso di nuova versione quando lo script pubblicato è lo stesso
   await p.waitForTimeout(300);
   assert.equal(await p.locator('#update').count(), 0);
@@ -473,7 +482,9 @@ const s2 = await serve('dist-remote', 4302);
   await p.waitForFunction(() => /7,5 di 8 h/.test(document.querySelector('.state').textContent));
   assert.match(await p.textContent('#sync'), /2 modifiche da inviare/);
   await p.screenshot({ path: `${OUT}/offline.png`, fullPage: true });
-  await p.click('[id^=remove-] >> nth=-1');
+  // Elimina sta dentro la modifica: si tocca la riga, poi Elimina.
+  await p.click('button.entry >> nth=-1');
+  await p.click('[id^=remove-]');
   await p.waitForFunction(() => /6,5 di 8 h/.test(document.querySelector('.state').textContent));
   assert.match(await p.textContent('#sync'), /1 modifica da inviare/);
 

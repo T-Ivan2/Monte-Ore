@@ -29,17 +29,19 @@ export function renderMonth() {
     const done = g > 0 && t === g, lack = g > 0 && ((d <= t0 && t < g) || t > g);
     const cls = [
       d === t0 ? 'today' : '', g === 0 ? 'off' : '', h && !t ? 'holiday' : '', done ? 'done' : '',
-      lack ? 'lack' : '', (g === 0 || d > t0) && t === 0 ? 'future' : ''
+      lack ? 'lack' : '', (g === 0 || d > t0) && t === 0 ? 'future' : '', t > 0 ? 'has' : ''
     ].join(' ');
+    // Come nella settimana, il giorno si riempie dal basso in proporzione alle ore.
+    const fill = g > 0 ? Math.min(100, Math.round((t / g) * 100)) : t > 0 ? 100 : 0;
     // Calendario quieto: i giorni futuri e liberi senza ore restano vuoti, risaltano solo quelli incompleti.
     const shown = t > 0 || (g > 0 && d <= t0);
     const label = shown ? fmt(t) : h ? 'Fest.' : '';
     const state = dayState(t, g, d <= t0);
     const tail = shown ? `, ${hoursText(t)}${state ? ', ' + state : ''}` : g === 0 ? `, ${offLabel(d)}` : ', nessuna ora';
     // Ai lettori vocali: giorno della settimana, data, ore e stato; il numero visibile è già detto nel testo nascosto.
-    return `<button class="calday ${cls}" data-act="openday" data-day="${d}" id="cal-${d}"><span class="sr">${dow(parse(d))} </span><span class="n">${parse(d).getDate()}</span><span class="sr"> ${MONTHS[m - 1]}${tail}</span><span class="t" aria-hidden="true">${label}</span></button>`;
+    return `<button class="calday ${cls}" style="--fill:${fill}%" data-act="openday" data-day="${d}" id="cal-${d}"><span class="sr">${dow(parse(d))} </span><span class="n">${parse(d).getDate()}</span><span class="sr"> ${MONTHS[m - 1]}${tail}</span><span class="t" aria-hidden="true">${label}</span></button>`;
   }).join('');
-  const lateText = late ? `<span class="warn">${late === 1 ? '1 giorno incompleto' : late + ' giorni incompleti'}</span>` : working.some(d => d <= t0) ? '<span class="ok">Nessun giorno incompleto</span>' : '';
+  const lateText = late ? `<span class="pill warn">${late === 1 ? '1 giorno incompleto' : late + ' giorni incompleti'}</span>` : working.some(d => d <= t0) ? '<span class="pill ok">Nessun giorno incompleto</span>' : '';
   app.innerHTML = `
     <div class="weekbar">
       <button class="icon" data-act="month" data-delta="-1" id="prev-month" aria-label="Mese precedente">${ICON.prev}</button>
@@ -48,14 +50,14 @@ export function renderMonth() {
       <span class="spacer"></span>
       ${S.month === t0.slice(0, 7) ? '' : '<button class="link" data-act="thismonth" id="this-month">Vai a oggi</button>'}
     </div>
-    <div class="row"><button class="btn" data-act="exportxlsx" id="export-xlsx" ${rowsIn.length ? '' : 'disabled'}>Esporta in Excel</button></div>
-    <section class="bank" aria-label="Monte ore del mese">
+    <section class="hero bank" aria-label="Monte ore del mese">
       <div class="banktop">
-        <div class="bankfig">${fmt(total)} <span>di ${fmt(due)} h</span></div>
+        <div class="bankfig fig"><b>${fmt(total)}</b> <span class="of">di ${fmt(due)} h</span></div>
         <div class="state">${lateText}</div>
       </div>
       <div class="bar" aria-hidden="true">${rows.filter(w => w.h > 0).map(w => `<i style="width:${(w.h / Math.max(due, total, 1)) * 100}%;background:${w.color}"></i>`).join('')}</div>
       <div class="legend">${rows.map(w => `<span style="--client:${w.color}"><span class="dot"></span>${esc(w.name)} <b>${fmt(w.h)} h</b></span>`).join('')}</div>
+      <div><button class="btn onhero" data-act="exportxlsx" id="export-xlsx" ${rowsIn.length ? '' : 'disabled'}>${ICON.download}Esporta in Excel</button></div>
     </section>
     <section class="cal" aria-label="Calendario del mese">
       ${DOW.map(d => `<div class="dow">${d.slice(0, 3)}</div>`).join('')}${cells}

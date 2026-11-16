@@ -3,7 +3,7 @@ import { COLORS, colorVar, fmt, slugify, validateProject, normalizeTitle, TITLE_
 import { store } from '../store.js';
 import * as sync from '../sync.js';
 import { S, who, freshDraft, refreshTasks, refreshProjects } from '../state.js';
-import { esc, keepFocus, toast, ICON } from '../ui.js';
+import { esc, keepFocus, toast, ICON, initials } from '../ui.js';
 import { render } from '../render.js';
 
 // Il titolo si modifica dentro la riga della task, senza aprire altre schermate.
@@ -27,15 +27,17 @@ function taskRow(t) {
   const k = `data-who="${esc(t.who)}" data-code="${esc(t.code)}"`;
   const editing = S.taskEdit && S.taskEdit.who === t.who && S.taskEdit.code === t.code;
   return `<div class="entry" style="--client:${w.color}">
-    <div class="code strong">${esc(t.code)}</div>
-    <div class="hrs">${fmt(t.hours)} h</div>
-    ${t.title && !editing ? `<div class="tsub ttl">${esc(t.title)}</div>` : ''}
-    <div class="who sub"><span class="dot"></span>${esc(w.name)}</div>
+    <div class="etext">
+      <div class="code strong">${esc(t.code)}</div>
+      ${t.title && !editing ? `<div class="tsub ttl">${esc(t.title)}</div>` : ''}
+      <div class="who sub">${esc(w.name)}</div>
+    </div>
+    <div class="hrs tile">${fmt(t.hours)} <small>h</small></div>
     ${editing ? titleFormHtml(t) : `<div class="ops">
-      <button class="link" data-act="edittitle" ${k}>${t.title ? 'Cambia titolo' : 'Aggiungi titolo'}</button>
+      <button class="mini" data-act="edittitle" ${k}>${t.title ? 'Cambia titolo' : 'Aggiungi titolo'}</button>
       ${t.done_at
-        ? `<button class="link" data-act="reopentask" ${k}>Riapri</button>`
-        : `<button class="link" data-act="donetask" ${k}>Termina</button>${t.hours === 0 ? `<button class="link" data-act="deltask" ${k}>Elimina</button>` : ''}`}
+        ? `<button class="mini" data-act="reopentask" ${k}>Riapri</button>`
+        : `<button class="mini" data-act="donetask" ${k}>Termina</button>${t.hours === 0 ? `<button class="mini" data-act="deltask" ${k}>Elimina</button>` : ''}`}
     </div>`}
   </div>`;
 }
@@ -61,15 +63,18 @@ function projectRow(p) {
   const own = S.tasks.filter(t => t.who === p.id);
   const hours = own.reduce((n, t) => n + t.hours, 0);
   const k = `data-id="${esc(p.id)}"`;
-  return `<div class="entry" style="--client:${colorVar(p.color)}">
-    <div class="who"><span class="dot"></span>${esc(p.name)}${p.archived_at ? '<span class="tag">Archiviato</span>' : ''}</div>
-    <div class="hrs">${fmt(hours)} h</div>
+  return `<div class="entry ${p.archived_at ? 'archived' : ''}" style="--client:${colorVar(p.color)}">
+    <div class="tile swatch" aria-hidden="true">${esc(initials(p.name))}</div>
+    <div class="etext">
+      <div class="who">${esc(p.name)}${p.archived_at ? '<span class="tag">Archiviato</span>' : ''}</div>
+      <div class="who sub">${own.length === 1 ? '1 task' : own.length + ' task'} · <span class="hrs">${fmt(hours)} h</span></div>
+    </div>
     <div class="ops">
-      <button class="link" data-act="editproject" ${k} id="edit-project-${esc(p.id)}">Modifica</button>
+      <button class="mini" data-act="editproject" ${k} id="edit-project-${esc(p.id)}">Modifica</button>
       ${p.archived_at
-        ? `<button class="link" data-act="restoreproject" ${k} id="restore-project-${esc(p.id)}">Ripristina</button>`
-        : `<button class="link" data-act="archiveproject" ${k} id="archive-project-${esc(p.id)}">Archivia</button>`}
-      ${own.length ? '' : `<button class="link" data-act="delproject" ${k} id="del-project-${esc(p.id)}">Elimina</button>`}
+        ? `<button class="mini" data-act="restoreproject" ${k} id="restore-project-${esc(p.id)}">Ripristina</button>`
+        : `<button class="mini" data-act="archiveproject" ${k} id="archive-project-${esc(p.id)}">Archivia</button>`}
+      ${own.length ? '' : `<button class="mini" data-act="delproject" ${k} id="del-project-${esc(p.id)}">Elimina</button>`}
     </div>
   </div>`;
 }
@@ -103,14 +108,14 @@ export function renderTasks() {
   keepFocus(() => {
     app.innerHTML = `
       <section class="day">
-        <h2 class="mhead">Task aperte</h2>
+        <h2 class="mhead">Task aperte${open.length ? ` <span class="count">${open.length}</span>` : ''}</h2>
         ${open.length ? `<div class="list">${open.map(taskRow).join('')}</div>` : '<p class="empty">Nessuna task aperta. Si aggiungono quando registri le ore.</p>'}
       </section>
       ${done.length ? `<section class="day"><h2 class="mhead">Terminate</h2><div class="list">${done.map(taskRow).join('')}</div></section>` : ''}
       <section class="day" id="projects">
         <h2 class="mhead">Progetti</h2>
         ${projects.length ? `<div class="list">${projects.map(projectRow).join('')}</div>` : '<p class="empty">Nessun progetto. Aggiungine uno per registrare le ore.</p>'}
-        ${S.projectForm ? projectFormHtml() : '<div><button class="btn" data-act="addproject" id="add-project">Aggiungi progetto</button></div>'}
+        ${S.projectForm ? projectFormHtml() : `<div><button class="btn wide" data-act="addproject" id="add-project">${ICON.plus}Aggiungi progetto</button></div>`}
         <p class="empty small">Un progetto archiviato non si propone più quando registri le ore, ma resta nei totali e nell'export. Si può eliminare solo un progetto senza task.</p>
       </section>`;
   });

@@ -17,16 +17,19 @@ export function renderDay() {
   const items = dayEntries(S.selected);
   const total = dayTotal(S.selected), tg = target(S.selected), r = rest(S.selected);
   const open = S.editing !== null || S.forceOpen || r > 0;
-  const statusText = tg === 0 ? `${total ? `<b>${fmt(total)}</b> h · ` : ''}<span>${offLabel(S.selected)}</span>`
-    : total > tg ? `<b>${fmt(total)}</b> di ${fmt(tg)} h · <span class="warn">${fmt(total - tg)} h in più</span>`
-    : r === 0 ? `<b>${fmt(total)}</b> di ${fmt(tg)} h · <span class="ok">Completo</span>`
-    : S.selected <= t0 ? `<b>${fmt(total)}</b> di ${fmt(tg)} h · <span class="warn">Mancano ${fmt(r)} h</span>`
-    : `<b>${fmt(total)}</b> di ${fmt(tg)} h`;
+  // Ore in grande e stato in un'etichetta. Il separatore resta per chi legge il testo, ma non si vede.
+  const fig = (n, unit) => `<span class="fig"><b>${fmt(n)}</b><span class="of"> ${unit}</span></span>`;
+  const pill = (cls, text) => `<span class="sr"> · </span><span class="pill ${cls}">${text}</span>`;
+  const of = `di ${fmt(tg)} h`;
+  const statusText = tg === 0 ? (total ? fig(total, 'h') + pill('', offLabel(S.selected)) : `<span class="pill">${offLabel(S.selected)}</span>`)
+    : total > tg ? fig(total, of) + pill('warn', `${fmt(total - tg)} h in più`)
+    : r === 0 ? fig(total, of) + pill('ok', 'Completo')
+    : S.selected <= t0 ? fig(total, of) + pill('warn', `Mancano ${fmt(r)} h`)
+    : fig(total, of);
   const copy = !items.length && S.editing === null && tg > 0 ? copySource(S.selected) : null;
-  // Barra del giorno: dice lo stato, non il progetto (quello si legge nelle voci). Scura mentre si riempie,
-  // verde a giornata completa, ambra se si superano le ore previste.
-  const barState = total > tg ? 'over' : total === tg ? 'full' : '';
-  const bar = tg > 0 ? `<div class="bar daybar ${barState}" aria-hidden="true"><i style="width:${Math.min(100, (total / tg) * 100)}%"></i></div>` : '';
+  // Barra del giorno: un tratto per voce nel colore del progetto, su una base pari alle ore previste.
+  const scale = Math.max(tg, total, 1);
+  const bar = tg > 0 || total > 0 ? `<div class="bar daybar" aria-hidden="true">${items.map(e => `<i style="width:${(e.hours / scale) * 100}%;background:${who(e.who).color}"></i>`).join('')}</div>` : '';
   // Primo avvio: nessuna ora caricata e nessuna task. Le task restano finché hanno ore (il database
   // impedisce di eliminarle), quindi chi ha già usato l'app per i progetti non rivede il suggerimento.
   const firstRun = !S.entries.length && !S.tasks.length && S.editing === null;
@@ -43,41 +46,43 @@ export function renderDay() {
         <div class="strip">${weekDays(S.week).map((d, i) => {
           const t = dayTotal(d), g = target(d);
           const done = g > 0 && t === g, lack = g > 0 && ((d <= t0 && t < g) || t > g), free = g === 0 && !t;
-          const cls = [d === S.selected ? 'sel' : '', d === t0 ? 'today' : '', g === 0 ? 'off' : '', done ? 'done' : '', lack ? 'lack' : ''].join(' ');
+          const cls = [d === S.selected ? 'sel' : '', d === t0 ? 'today' : '', g === 0 ? 'off' : '', done ? 'done' : '', lack ? 'lack' : '', t > 0 ? 'has' : ''].join(' ');
+          // Il giorno si riempie dal basso in proporzione alle ore registrate.
+          const fill = g > 0 ? Math.min(100, Math.round((t / g) * 100)) : t > 0 ? 100 : 0;
           // Il nome letto dai lettori vocali parte dal testo visibile ("Lun 2") e aggiunge il contesto.
           const extra = [free ? offLabel(d) : hoursText(t), dayState(t, g, d <= t0), d === t0 ? 'oggi' : ''].filter(Boolean).join(', ');
           // Il numero visibile è nascosto ai lettori vocali perché il testo nascosto lo dice già con l'unità.
-          return `<button class="${cls}" data-act="select" data-day="${d}" id="strip-${d}" aria-pressed="${d === S.selected}">${DOW[i].slice(0, 3)} ${parse(d).getDate()}<b aria-hidden="true">${free ? '–' : fmt(t)}</b><span class="sr">, ${extra}</span></button>`;
+          return `<button class="${cls}" style="--fill:${fill}%" data-act="select" data-day="${d}" id="strip-${d}" aria-pressed="${d === S.selected}"><span class="dn">${DOW[i].slice(0, 3)} ${parse(d).getDate()}</span><b aria-hidden="true">${free ? '–' : fmt(t)}</b><span class="sr">, ${extra}</span></button>`;
         }).join('')}</div>
       </section>
       <section class="day">
-        <div class="dayhead"><h2>${dayLabel(S.selected)}</h2><div class="state">${statusText}</div></div>
-        ${bar}
+        <div class="hero dayhead"><h2>${dayLabel(S.selected)}</h2><div class="state">${statusText}</div>${bar}</div>
         ${items.length ? `<div class="list">${items.map(entryHtml).join('')}</div>` : ''}
         ${copy ? `<div class="row"><button class="btn" data-act="copyday" id="copy-day">${ICON.copy}Copia da ${shortLabel(copy.day)} · ${fmt(copy.rows.reduce((n, e) => n + e.hours, 0))} h</button></div>` : ''}
         ${firstRun ? '<p class="hint"><b>Si parte da qui.</b> Scegli il progetto, scrivi il codice della task ServiceNow e le ore, poi salva. Dalla campanella in alto scegli quando ricevere i promemoria.</p>' : ''}
-        ${open ? formHtml() : `<div><button class="btn" data-act="openform" id="open-form">${items.length ? 'Aggiungi altre ore' : 'Aggiungi ore'}</button></div>`}
+        ${open ? formHtml() : `<div><button class="btn wide" data-act="openform" id="open-form">${ICON.plus}${items.length ? 'Aggiungi altre ore' : 'Aggiungi ore'}</button></div>`}
       </section>`;
   });
 }
 
 // Consultando il giorno conta il codice: in primo piano, con titolo e progetto piccoli sotto.
+// Tutta la riga è un pulsante che apre la modifica; le ore stanno in un riquadro nel colore del progetto.
 function entryHtml(e) {
   const w = who(e.who);
   const title = e.code ? taskOf(e.who, e.code)?.title : null;
   const head = e.code
-    ? `<div class="who"><span class="dot"></span><span class="code strong">${esc(e.code)}</span></div>`
-    : `<div class="who"><span class="dot"></span>${esc(w.name)}</div>`;
-  return `<div class="entry ${S.editing === e.id ? 'editing' : ''}" style="--client:${w.color}">
-    ${head}
-    <div class="hrs">${fmt(e.hours)} h</div>
-    ${e.code ? `<div class="tsub">${title ? `<span class="ttl">${esc(title)}</span> · ` : ''}${esc(w.name)}</div>` : ''}
-    ${e.description ? `<div class="desc">${esc(e.description)}</div>` : ''}
-    <div class="ops">
-      <button class="link" data-act="edit" data-id="${e.id}" id="edit-${e.id}">Modifica</button>
-      <button class="link" data-act="remove" data-id="${e.id}" id="remove-${e.id}">Elimina</button>
-    </div>
-  </div>`;
+    ? `<span class="who"><span class="code strong">${esc(e.code)}</span></span>`
+    : `<span class="who">${esc(w.name)}</span>`;
+  return `<button class="entry ${S.editing === e.id ? 'editing' : ''}" style="--client:${w.color}" data-act="edit" data-id="${e.id}" id="edit-${e.id}">
+    <span class="sr">Modifica: </span>
+    <span class="etext">
+      ${head}
+      ${e.code ? `<span class="tsub">${title ? `<span class="ttl">${esc(title)}</span> · ` : ''}${esc(w.name)}</span>` : ''}
+      ${e.description ? `<span class="desc">${esc(e.description)}</span>` : ''}
+    </span>
+    <span class="hrs tile">${fmt(e.hours)} <small>h</small></span>
+    ${ICON.chevron}
+  </button>`;
 }
 
 // I progetti archiviati non si propongono, tranne quello della voce che si sta modificando.
@@ -96,7 +101,7 @@ function formHtml() {
     ? `<div class="chips">${opts.map(o => `<label style="--client:${o.color}"><input type="radio" name="who" id="who-${esc(o.id)}" value="${esc(o.id)}" ${draft.who === o.id ? 'checked' : ''}>${isProj ? '<span class="dot"></span>' : ''}${o.id === 'altro' ? 'Altro' : esc(o.name)}${ICON.tick}</label>`).join('')}</div>`
     : '<p class="empty">Non ci sono progetti attivi. <button type="button" class="link" data-act="view" data-view="tasks" id="go-projects">Aggiungine uno</button></p>';
   return `<form id="entry-form" novalidate>
-    ${S.editing !== null ? '<h3>Modifica voce</h3>' : ''}
+    <h3>${S.editing !== null ? 'Modifica voce' : 'Registra ore'}</h3>
     <div class="seg" role="radiogroup" aria-label="Tipo di ore">
       <label><input type="radio" name="kind" id="kind-project" value="project" ${isProj ? 'checked' : ''}><span>Progetto</span></label>
       <label><input type="radio" name="kind" id="kind-absence" value="absence" ${!isProj ? 'checked' : ''}><span>Assenza</span></label>
@@ -124,9 +129,10 @@ function formHtml() {
       <textarea id="f-desc">${esc(draft.desc)}</textarea>
     </div>`
       : `<button type="button" class="link adddesc" data-act="adddesc" id="add-desc">${ICON.plus}Aggiungi una descrizione</button>`}
-    <div class="row">
+    <div class="row actions">
       <button class="btn primary" type="submit" id="save" ${S.busy ? 'disabled' : ''}>${S.editing !== null ? 'Salva modifiche' : 'Salva ore'}</button>
       ${S.editing !== null || (S.forceOpen && rest(S.selected) === 0) ? '<button class="btn" type="button" data-act="cancel" id="cancel">Annulla</button>' : ''}
+      ${S.editing !== null ? `<span class="spacer"></span><button class="btn danger" type="button" data-act="remove" data-id="${S.editing}" id="remove-${S.editing}">${ICON.trash}Elimina</button>` : ''}
     </div>
   </form>`;
 }
