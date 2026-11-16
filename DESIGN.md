@@ -210,6 +210,12 @@ Settimana (alti 66px) e calendario (60px). Il fondo si riempie dal basso: tinta 
 ### Righe
 Riquadro delle ore a sinistra (tinta del progetto), poi codice in primo piano con titolo e progetto sotto. Le voci del giorno sono pulsanti a tutta riga che aprono la modifica, con una freccia a destra; "Elimina" sta nel modulo di modifica. Nelle schede Task e Progetti le azioni sono pillole Nebbia sotto il testo.
 
+### Sede del giorno
+Riquadro "Dove lavori" sopra le voci: quattro chip (due colonne sul telefono, quattro dai 560px) con la stessa selezione delle altre chip. La trasferta apre un piccolo modulo (luogo, cliente); una volta salvata, mostra "luogo · cliente" con "Modifica". "Togli" è un link a destra del titolo. Nel calendario la sede è una sigla di 2 lettere in maiuscoletto in basso a destra del giorno (su Nebbia; la trasferta su velo d'accento), con il nome completo per gli screen reader.
+
+### Avanzamento della stima
+Sotto la riga della task: barra sottile (6px, arrotondata) con il riempimento d'accento e, sotto, "X di Y h · ne restano Z" in testo secondario. Oltre la stima la barra è piena e ambra e il testo dice quante ore sei oltre. Nell'elenco delle task da scegliere le stesse ore sono un testo breve accanto al progetto.
+
 ### Buttons
 - **Primary:** pillola d'accento, 44px; a tutta larghezza sul telefono. Uno per riquadro.
 - **Secondary:** bordo Linea, 12px.

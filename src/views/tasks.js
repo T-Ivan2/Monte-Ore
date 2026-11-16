@@ -1,40 +1,66 @@
 // Vista Task: task aperte e terminate, e gestione dei progetti.
-import { COLORS, colorVar, fmt, slugify, validateProject, normalizeTitle, TITLE_MAX } from '../logic.js';
+import { COLORS, colorVar, fmt, slugify, validateProject, validateTaskDetails, estimateProgress, TITLE_MAX } from '../logic.js';
 import { store } from '../store.js';
 import * as sync from '../sync.js';
-import { S, who, freshDraft, refreshTasks, refreshProjects } from '../state.js';
+import { S, who, freshDraft, refreshTasks, refreshProjects, knownFunctionals } from '../state.js';
 import { esc, keepFocus, toast, ICON, initials } from '../ui.js';
 import { render } from '../render.js';
 
-// Il titolo si modifica dentro la riga della task, senza aprire altre schermate.
-function titleFormHtml(t) {
-  const f = S.taskEdit;
+// I dettagli si modificano dentro la riga della task, senza aprire altre schermate.
+function detailsFormHtml(t) {
+  const f = S.taskEdit, e = f.errors || {};
+  const desc = id => e[id] ? `aria-invalid="true" aria-describedby="e-t-${id}"` : '';
+  const err = id => e[id] ? `<p class="err" id="e-t-${id}">${e[id]}</p>` : '';
   return `<form id="title-form" class="inlineform" novalidate>
-    <label class="lbl" for="t-title">Titolo di <span class="code">${esc(t.code)}</span></label>
-    <input class="input" id="t-title" value="${esc(f.title)}" maxlength="${TITLE_MAX}" autocomplete="off" placeholder="Es. Analisi requisiti" ${f.error ? 'aria-invalid="true" aria-describedby="e-t-title"' : ''}>
-    ${f.error ? `<p class="err" id="e-t-title">${f.error}</p>` : ''}
-    <p class="empty small">Resta uguale in tutte le ore registrate su questa task. Lascia vuoto per toglierlo.</p>
+    <h3>Dettagli di <span class="code">${esc(t.code)}</span></h3>
+    <div class="field">
+      <label class="lbl" for="t-title">Titolo</label>
+      <input class="input" id="t-title" value="${esc(f.title)}" maxlength="${TITLE_MAX}" autocomplete="off" placeholder="Es. Analisi requisiti" ${desc('title')}>
+      ${err('title')}
+    </div>
+    <div class="field">
+      <label class="lbl" for="t-func">Funzionale di riferimento</label>
+      <input class="input" id="t-func" value="${esc(f.functional)}" maxlength="${TITLE_MAX}" autocomplete="off" list="functionals" placeholder="Es. Mario Rossi" ${desc('functional')}>
+      <datalist id="functionals">${knownFunctionals().map(n => `<option value="${esc(n)}"></option>`).join('')}</datalist>
+      ${err('functional')}
+    </div>
+    <div class="field">
+      <label class="lbl" for="t-est">Ore stimate</label>
+      <input class="input short" id="t-est" value="${esc(f.estimate)}" inputmode="decimal" autocomplete="off" placeholder="Es. 40" ${desc('estimate')}>
+      ${err('estimate')}
+    </div>
+    <p class="empty small">Valgono per tutte le ore registrate su questa task. Lascia vuoto un campo per toglierlo.</p>
     <div class="row">
-      <button class="btn primary" type="submit" id="t-save">Salva titolo</button>
+      <button class="btn primary" type="submit" id="t-save">Salva dettagli</button>
       <button class="btn" type="button" data-act="canceltitle" id="t-cancel">Annulla</button>
     </div>
   </form>`;
 }
 
-// Consultando le task conta il codice: in primo piano, con titolo e progetto piccoli sotto.
+// Avanzamento rispetto alla stima: barra e "13 di 40 h", ambra quando si supera.
+function progressHtml(t) {
+  const pr = estimateProgress(t.hours, t.estimate);
+  if (!pr) return '';
+  const text = pr.over ? `${fmt(t.hours)} di ${fmt(t.estimate)} h · ${fmt(t.hours - t.estimate)} h oltre la stima` : `${fmt(t.hours)} di ${fmt(t.estimate)} h · ne restano ${fmt(pr.left)}`;
+  return `<div class="est ${pr.over ? 'over' : ''}"><span class="estbar" aria-hidden="true"><i style="width:${pr.pct}%"></i></span><span class="esttext">${text}</span></div>`;
+}
+
+// Consultando le task conta il codice: in primo piano, con titolo, funzionale e progetto piccoli sotto.
 function taskRow(t) {
   const w = who(t.who);
   const k = `data-who="${esc(t.who)}" data-code="${esc(t.code)}"`;
   const editing = S.taskEdit && S.taskEdit.who === t.who && S.taskEdit.code === t.code;
+  const hasDetails = t.title || t.functional || t.estimate;
   return `<div class="entry" style="--client:${w.color}">
     <div class="etext">
       <div class="code strong">${esc(t.code)}</div>
       ${t.title && !editing ? `<div class="tsub ttl">${esc(t.title)}</div>` : ''}
-      <div class="who sub">${esc(w.name)}</div>
+      <div class="who sub">${esc(w.name)}${t.functional && !editing ? ` · <span class="func">Funzionale: ${esc(t.functional)}</span>` : ''}</div>
+      ${editing ? '' : progressHtml(t)}
     </div>
     <div class="hrs tile">${fmt(t.hours)} <small>h</small></div>
-    ${editing ? titleFormHtml(t) : `<div class="ops">
-      <button class="mini" data-act="edittitle" ${k}>${t.title ? 'Cambia titolo' : 'Aggiungi titolo'}</button>
+    ${editing ? detailsFormHtml(t) : `<div class="ops">
+      <button class="mini" data-act="edittitle" ${k}>${hasDetails ? 'Modifica dettagli' : 'Aggiungi dettagli'}</button>
       ${t.done_at
         ? `<button class="mini" data-act="reopentask" ${k}>Riapri</button>`
         : `<button class="mini" data-act="donetask" ${k}>Termina</button>${t.hours === 0 ? `<button class="mini" data-act="deltask" ${k}>Elimina</button>` : ''}`}
@@ -42,20 +68,24 @@ function taskRow(t) {
   </div>`;
 }
 
-async function saveTitle() {
+async function saveDetails() {
   const f = S.taskEdit;
   if (!f || S.busy) return;
-  const title = normalizeTitle(f.title);
-  if (title.length > TITLE_MAX) { f.error = `Il titolo può avere al massimo ${TITLE_MAX} caratteri.`; render(); document.getElementById('t-title')?.focus(); return; }
+  const { errors, value } = validateTaskDetails(f);
+  f.errors = errors;
+  if (Object.keys(errors).length) {
+    render();
+    document.getElementById(errors.title ? 't-title' : errors.functional ? 't-func' : 't-est')?.focus();
+    return;
+  }
   S.busy = true;
   try {
-    const { queued } = await sync.setTaskTitle(f.who, f.code, title || null);
+    const { queued } = await sync.setTaskDetails(f.who, f.code, value);
     S.taskEdit = null;
     await refreshTasks();
     render();
-    const later = queued ? ' Lo invio appena torna la connessione.' : '';
-    toast(title ? `Titolo di ${f.code} salvato.${later}` : `Titolo di ${f.code} tolto.${later}`);
-  } catch { toast('Non sono riuscito a salvare il titolo. Riprova.'); }
+    toast(`Dettagli di ${f.code} salvati.${queued ? ' Li invio appena torna la connessione.' : ''}`);
+  } catch { toast('Non sono riuscito a salvare i dettagli. Riprova.'); }
   S.busy = false;
 }
 
@@ -188,7 +218,7 @@ async function removeProject(id) {
 export const actions = {
   edittitle: b => {
     const t = S.tasks.find(x => x.who === b.dataset.who && x.code === b.dataset.code);
-    S.taskEdit = { who: t.who, code: t.code, title: t.title || '', error: '' };
+    S.taskEdit = { who: t.who, code: t.code, title: t.title || '', functional: t.functional || '', estimate: t.estimate ? fmt(t.estimate) : '', errors: {} };
     render();
     document.getElementById('t-title')?.focus();
   },
@@ -217,8 +247,10 @@ export const actions = {
 export function onInput(t) {
   if (t.id === 'p-name' && S.projectForm) S.projectForm.name = t.value;
   if (t.id === 't-title' && S.taskEdit) S.taskEdit.title = t.value;
+  if (t.id === 't-func' && S.taskEdit) S.taskEdit.functional = t.value;
+  if (t.id === 't-est' && S.taskEdit) S.taskEdit.estimate = t.value;
 }
 export function onChange(t) {
   if (t.name === 'pcolor' && S.projectForm) S.projectForm.color = t.value;
 }
-export const onSubmit = { 'project-form': saveProject, 'title-form': saveTitle };
+export const onSubmit = { 'project-form': saveProject, 'title-form': saveDetails };

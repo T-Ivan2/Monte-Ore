@@ -1,6 +1,6 @@
 // Vista Mese: monte ore, calendario ed export in Excel.
-import { ABSENCES, DOW, MONTHS, fmt, parse, monday, weekDays, holidayName, monthDays, shiftMonth, dayLength, incompleteDays } from '../logic.js';
-import { S, today, dayTotal, target, offLabel, who, names, taskTitles, ensure } from '../state.js';
+import { ABSENCES, DOW, MONTHS, PLACES, placeInfo, fmt, parse, monday, weekDays, holidayName, monthDays, shiftMonth, dayLength, incompleteDays } from '../logic.js';
+import { S, today, dayTotal, target, offLabel, who, names, taskTitles, placeOf, ensure } from '../state.js';
 import { esc, toast, loadFail, ICON, dow, hoursText, dayState } from '../ui.js';
 import { render } from '../render.js';
 import { go } from './day.js';
@@ -38,9 +38,15 @@ export function renderMonth() {
     const label = shown ? fmt(t) : h ? 'Fest.' : '';
     const state = dayState(t, g, d <= t0);
     const tail = shown ? `, ${hoursText(t)}${state ? ', ' + state : ''}` : g === 0 ? `, ${offLabel(d)}` : ', nessuna ora';
+    // Sigla della sede in basso a destra; per i lettori vocali il nome completo.
+    const pl = placeOf(d), info = pl ? placeInfo(pl.kind) : null;
+    const plText = info ? `, ${pl.kind === 'trasferta' ? `trasferta a ${pl.place}` : info.name}` : '';
     // Ai lettori vocali: giorno della settimana, data, ore e stato; il numero visibile è già detto nel testo nascosto.
-    return `<button class="calday ${cls}" style="--fill:${fill}%" data-act="openday" data-day="${d}" id="cal-${d}"><span class="sr">${dow(parse(d))} </span><span class="n">${parse(d).getDate()}</span><span class="sr"> ${MONTHS[m - 1]}${tail}</span><span class="t" aria-hidden="true">${label}</span></button>`;
+    return `<button class="calday ${cls}" style="--fill:${fill}%" data-act="openday" data-day="${d}" id="cal-${d}"><span class="sr">${dow(parse(d))} </span><span class="n">${parse(d).getDate()}</span><span class="sr"> ${MONTHS[m - 1]}${tail}${plText}</span><span class="t" aria-hidden="true">${label}</span>${info ? `<span class="pl pl-${pl.kind}" aria-hidden="true">${info.short}</span>` : ''}</button>`;
   }).join('');
+  // Giorni per sede nel mese, utile per rimborsi e presenze.
+  const monthPlaces = S.places.filter(p => p.day.slice(0, 7) === S.month);
+  const placeCounts = PLACES.map(p => ({ ...p, n: monthPlaces.filter(x => x.kind === p.id).length })).filter(p => p.n > 0);
   const lateText = late ? `<span class="pill warn">${late === 1 ? '1 giorno incompleto' : late + ' giorni incompleti'}</span>` : working.some(d => d <= t0) ? '<span class="pill ok">Nessun giorno incompleto</span>' : '';
   app.innerHTML = `
     <div class="weekbar">
@@ -57,6 +63,7 @@ export function renderMonth() {
       </div>
       <div class="bar" aria-hidden="true">${rows.filter(w => w.h > 0).map(w => `<i style="width:${(w.h / Math.max(due, total, 1)) * 100}%;background:${w.color}"></i>`).join('')}</div>
       <div class="legend">${rows.map(w => `<span style="--client:${w.color}"><span class="dot"></span>${esc(w.name)} <b>${fmt(w.h)} h</b></span>`).join('')}</div>
+      ${placeCounts.length ? `<div class="legend places" aria-label="Giorni per sede">${placeCounts.map(c => `<span><span class="pl pl-${c.id}" aria-hidden="true">${c.short}</span>${c.name} <b>${c.n === 1 ? '1 giorno' : c.n + ' giorni'}</b></span>`).join('')}</div>` : ''}
       <div><button class="btn onhero" data-act="exportxlsx" id="export-xlsx" ${rowsIn.length ? '' : 'disabled'}>${ICON.download}Esporta in Excel</button></div>
     </section>
     <section class="cal" aria-label="Calendario del mese">
@@ -78,7 +85,8 @@ export const actions = {
     b.disabled = true;
     try {
       const { exportMonth } = await import('../export.js');
-      const r = await exportMonth(inMonth(), S.month, monthTarget(), dayLength(S.dayHours), names(), taskTitles());
+      const places = S.places.filter(p => p.day.slice(0, 7) === S.month);
+      const r = await exportMonth(inMonth(), S.month, monthTarget(), dayLength(S.dayHours), names(), taskTitles(), places, S.tasks);
       if (r === 'downloaded') toast('File Excel scaricato.');
     } catch { toast('Non sono riuscito a creare il file Excel. Riprova.'); }
     b.disabled = false;

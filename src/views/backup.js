@@ -15,8 +15,8 @@ async function download(b) {
     // Le modifiche fatte offline devono essere nel backup: prima si inviano.
     await flushNow();
     if (pendingCount()) throw Object.assign(new Error('offline'), { offline: true });
-    const [entries, projects, tasks, settings] = await Promise.all([store.listAllEntries(), store.listProjects(), store.listTasks(), store.getSettings()]);
-    const data = buildBackup({ entries, projects, tasks, settings });
+    const [entries, projects, tasks, settings, places] = await Promise.all([store.listAllEntries(), store.listProjects(), store.listTasks(), store.getSettings(), store.listAllPlaces()]);
+    const data = buildBackup({ entries, projects, tasks, settings, places });
     const file = new File([JSON.stringify(data, null, 2)], `monte-ore-backup-${today()}.json`, { type: 'application/json' });
     if (await saveFile(file) === 'downloaded') toast(`Backup scaricato: ${plural(entries.length, 'voce', 'voci')}, ${plural(projects.length, 'progetto', 'progetti')}.`);
   } catch (err) {
@@ -32,23 +32,25 @@ async function restore(file, reload) {
   try {
     await flushNow();
     if (pendingCount()) throw Object.assign(new Error('offline'), { offline: true });
-    const [entries, projects, tasks] = await Promise.all([store.listAllEntries(), store.listProjects(), store.listTasks()]);
-    const plan = planRestore(backup, { entries, projects, tasks });
+    const [entries, projects, tasks, places] = await Promise.all([store.listAllEntries(), store.listProjects(), store.listTasks(), store.listAllPlaces()]);
+    const plan = planRestore(backup, { entries, projects, tasks, places });
     const notes = [
       plan.present ? `${plural(plan.present, 'voce è', 'voci sono')} già presenti` : '',
       plan.skipped ? `${plural(plan.skipped, 'voce non valida viene saltata', 'voci non valide vengono saltate')}` : ''
     ].filter(Boolean).join('; ');
-    if (!plan.entries.length && !plan.projects.length) {
+    if (!plan.entries.length && !plan.projects.length && !plan.places.length) {
       toast(`Niente da ripristinare${notes ? ': ' + notes : ''}.`);
       return;
     }
-    const what = [plan.entries.length && plural(plan.entries.length, 'voce', 'voci'), plan.projects.length && plural(plan.projects.length, 'progetto', 'progetti')].filter(Boolean).join(' e ');
+    const what = [plan.entries.length && plural(plan.entries.length, 'voce', 'voci'), plan.projects.length && plural(plan.projects.length, 'progetto', 'progetti'),
+      plan.places.length && plural(plan.places.length, 'sede', 'sedi')].filter(Boolean).join(', ').replace(/, ([^,]*)$/, ' e $1');
     const when = backup.exportedAt ? ` del ${new Date(backup.exportedAt).toLocaleDateString('it-IT')}` : '';
     if (!confirm(`Dal backup${when} aggiungo ${what}.${notes ? ' ' + notes[0].toUpperCase() + notes.slice(1) + '.' : ''} I dati che hai già non vengono modificati. Continuare?`)) return;
     for (const p of plan.projects) await store.addProject(p);
     for (let i = 0; i < plan.entries.length; i += 500) await store.addEntries(plan.entries.slice(i, i + 500));
     for (const t of plan.doneTasks) await store.setTaskDone(t.who, t.code, true);
-    for (const t of plan.titles) await store.setTaskTitle(t.who, t.code, t.title);
+    for (const t of plan.details) await store.setTaskDetails(t.who, t.code, t.patch);
+    for (const p of plan.places) await store.setPlace(p.day, { kind: p.kind, place: p.place, client: p.client });
     await reload();
     toast(`Ripristino completato: aggiunte ${what}.`);
   } catch (err) {

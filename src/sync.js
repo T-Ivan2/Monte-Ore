@@ -60,9 +60,13 @@ export async function removeEntries(ids) {
   return write(ids.map(id => ({ op: 'remove', id })), () => store.removeEntries(ids));
 }
 export const removeEntry = id => removeEntries([id]);
-// Titolo di una task: anche offline, parte dopo la voce che crea la task.
-export const setTaskTitle = (who, code, title) =>
-  write([{ op: 'title', who, code, title: title || null }], () => store.setTaskTitle(who, code, title || null));
+// Dettagli di una task (titolo, funzionale, ore stimate): anche offline, partono dopo la voce che crea la task.
+export const setTaskDetails = (who, code, patch) =>
+  write([{ op: 'task', who, code, patch }], () => store.setTaskDetails(who, code, patch));
+export const setTaskTitle = (who, code, title) => setTaskDetails(who, code, { title: title || null });
+// Sede di lavoro di un giorno: anche offline. null la toglie.
+export const setPlace = (day, value) =>
+  write([{ op: 'place', day, value: value || null }], () => store.setPlace(day, value || null));
 
 // Invia la coda. Un solo invio alla volta; le modifiche fatte nel frattempo si accodano dopo.
 export function flushNow() {
@@ -72,7 +76,8 @@ export function flushNow() {
       add: row => store.addEntry(row),
       update: (id, patch) => store.updateEntry(id, patch),
       remove: id => store.removeEntry(id),
-      title: (who, code, title) => store.setTaskTitle(who, code, title)
+      task: (who, code, patch) => store.setTaskDetails(who, code, patch),
+      place: (day, value) => store.setPlace(day, value)
     }, isNetworkError);
     queue = res.remaining;
     for (const op of incoming) queue = enqueue(queue, op);
