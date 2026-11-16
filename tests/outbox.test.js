@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { enqueue, overlay, overlayTasks, flush } from '../src/outbox.js';
+import { enqueue, overlay, overlayTasks, overlayPlaces, flush } from '../src/outbox.js';
 
 const row = (id, hours = 3, extra = {}) => ({ id, day: '2026-11-04', who: 'inpeco', hours, code: 'T1', description: '', ...extra });
 const q = (...ops) => ops.reduce(enqueue, []);
@@ -30,25 +30,44 @@ describe('coda offline: fusione', () => {
   });
 });
 
-describe('coda offline: titolo delle task', () => {
-  const title = (t, code = 'T1') => ({ op: 'title', who: 'inpeco', code, title: t });
-  it('tiene solo l\'ultimo titolo, dopo la voce che crea la task', () => {
-    const qq = q({ op: 'add', row: row('a', 3, { code: 'NEW' }) }, title('Primo', 'NEW'), { op: 'add', row: row('b') }, title('Secondo', 'NEW'));
-    expect(qq.map(x => x.op)).toEqual(['add', 'add', 'title']);
-    expect(qq[2].title).toBe('Secondo');
+describe('coda offline: dettagli delle task', () => {
+  const task = (patch, code = 'T1') => ({ op: 'task', who: 'inpeco', code, patch });
+  const legacy = (t, code = 'T1') => ({ op: 'title', who: 'inpeco', code, title: t });
+  it('fonde i dettagli, dopo la voce che crea la task', () => {
+    const qq = q({ op: 'add', row: row('a', 3, { code: 'NEW' }) }, task({ title: 'Primo' }, 'NEW'), { op: 'add', row: row('b') }, task({ estimate: 40, title: 'Secondo' }, 'NEW'));
+    expect(qq.map(x => x.op)).toEqual(['add', 'add', 'task']);
+    expect(qq[2].patch).toEqual({ title: 'Secondo', estimate: 40 });
   });
-  it('eliminare una voce non toglie il titolo della task', () => {
-    expect(q({ op: 'add', row: row('a') }, title('Analisi'), { op: 'remove', id: 'a' })).toEqual([title('Analisi')]);
+  it('legge le code salvate con il vecchio formato del titolo', () => {
+    expect(q(legacy('Analisi'), task({ functional: 'Mario Rossi' }))).toEqual([task({ title: 'Analisi', functional: 'Mario Rossi' })]);
+    expect(overlayTasks([{ who: 'inpeco', code: 'T1', hours: 1 }], [legacy('Vecchio')])[0].title).toBe('Vecchio');
   });
-  it('mostra il titolo anche sulle task create offline', () => {
-    const out = overlayTasks([], q({ op: 'add', row: row('a', 2, { code: 'NEW' }) }, title('Nuova analisi', 'NEW')));
-    expect(out).toMatchObject([{ code: 'NEW', title: 'Nuova analisi', hours: 2 }]);
+  it('eliminare una voce non toglie i dettagli della task', () => {
+    expect(q({ op: 'add', row: row('a') }, task({ title: 'Analisi' }), { op: 'remove', id: 'a' })).toEqual([task({ title: 'Analisi' })]);
   });
-  it('invia il titolo in ordine', async () => {
+  it('mostra i dettagli anche sulle task create offline', () => {
+    const out = overlayTasks([], q({ op: 'add', row: row('a', 2, { code: 'NEW' }) }, task({ title: 'Nuova analisi', estimate: 16 }, 'NEW')));
+    expect(out).toMatchObject([{ code: 'NEW', title: 'Nuova analisi', estimate: 16, hours: 2 }]);
+  });
+  it('invia dettagli e sedi in ordine, anche dal vecchio formato', async () => {
     const calls = [];
-    const api = { add: async r => calls.push(['add', r.id]), update: async () => {}, remove: async () => {}, title: async (w, c, t) => calls.push(['title', c, t]) };
-    await flush(q({ op: 'add', row: row('a', 2, { code: 'NEW' }) }, title('Analisi', 'NEW')), api, isNet);
-    expect(calls).toEqual([['add', 'a'], ['title', 'NEW', 'Analisi']]);
+    const api = { add: async r => calls.push(['add', r.id]), update: async () => {}, remove: async () => {},
+      task: async (w, c, p) => calls.push(['task', c, p]), place: async (d, v) => calls.push(['place', d, v?.kind ?? null]) };
+    await flush([{ op: 'add', row: row('a', 2, { code: 'NEW' }) }, legacy('Analisi', 'NEW'), { op: 'place', day: '2026-11-04', value: { kind: 'milano', place: null, client: null } }], api, isNet);
+    expect(calls).toEqual([['add', 'a'], ['task', 'NEW', { title: 'Analisi' }], ['place', '2026-11-04', 'milano']]);
+  });
+});
+
+describe('coda offline: sede del giorno', () => {
+  const place = (day, kind, extra = {}) => ({ op: 'place', day, value: kind ? { kind, place: null, client: null, ...extra } : null });
+  it('tiene solo l\'ultima scelta di ogni giorno', () => {
+    const qq = q(place('2026-11-04', 'torino'), place('2026-11-05', 'smart'), place('2026-11-04', 'trasferta', { place: 'Bologna' }));
+    expect(qq.map(x => [x.day, x.value.kind])).toEqual([['2026-11-05', 'smart'], ['2026-11-04', 'trasferta']]);
+  });
+  it('mostra le sedi in attesa sopra quelle lette, anche quando si tolgono', () => {
+    const read = [{ day: '2026-11-03', kind: 'torino' }, { day: '2026-11-04', kind: 'milano' }];
+    const out = overlayPlaces(read, q(place('2026-11-04', 'smart'), place('2026-11-03', null), place('2026-11-06', 'trasferta', { place: 'Roma', client: 'Inpeco' })));
+    expect(out.map(p => [p.day, p.kind, p.place ?? null]).sort()).toEqual([['2026-11-04', 'smart', null], ['2026-11-06', 'trasferta', 'Roma']]);
   });
 });
 

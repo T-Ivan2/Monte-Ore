@@ -385,7 +385,7 @@ const s1 = await serve('dist', 4301);
   await p.click('[data-act=edittitle][data-code=TASK0001]');
   assert.equal(await p.inputValue('#t-title'), 'Analisi requisiti');
   await p.fill('#t-title', 'Analisi requisiti v2'); await p.click('#t-save');
-  await p.waitForFunction(() => /Titolo di TASK0001 salvato/.test(document.getElementById('toast').textContent));
+  await p.waitForFunction(() => /Dettagli di TASK0001 salvati/.test(document.getElementById('toast').textContent));
   assert.match(await p.textContent('#app .list'), /Analisi requisiti v2/);
   await p.screenshot({ path: `${OUT}/task-titolo.png`, fullPage: true });
   await p.click('#tab-day');
@@ -402,10 +402,75 @@ const s1 = await serve('dist', 4301);
   await p.click('#tab-tasks');
   await p.click('[data-act=edittitle][data-code=TASK0001]');
   await p.fill('#t-title', '   '); await p.click('#t-save');
-  await p.waitForFunction(() => /Titolo di TASK0001 tolto/.test(document.getElementById('toast').textContent));
+  await p.waitForFunction(() => /Dettagli di TASK0001 salvati/.test(document.getElementById('toast').textContent));
   await p.click('#tab-day');
   assert.equal(await p.textContent('.taskopt .tt.tcode'), 'TASK0001');
   assert.equal((await p.textContent('.entry .tsub')).trim(), 'Shüco');
+  assert.equal(await p.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
+}
+{
+  // Dettagli delle task (funzionale, ore stimate) e sede di lavoro del giorno
+  const [p] = await page('', { viewport: { width: 390, height: 844 }, colorScheme: 'light' });
+  await p.goto('http://localhost:4301/');
+  await p.waitForSelector('#entry-form');
+  await p.fill('#f-code', 'TASK0001'); await p.fill('#f-hours', '3'); await p.click('#save');
+  await p.waitForSelector('.entry');
+
+  await p.click('#tab-tasks');
+  await p.click('[data-act=edittitle][data-code=TASK0001]');
+  await p.fill('#t-title', 'Analisi'); await p.fill('#t-func', ' Mario   Rossi '); await p.fill('#t-est', '7,3'); await p.click('#t-save');
+  assert.match(await p.textContent('#e-t-estimate'), /mezz/);
+  await p.fill('#t-est', '4'); await p.click('#t-save');
+  await p.waitForFunction(() => /Dettagli di TASK0001 salvati/.test(document.getElementById('toast').textContent));
+  assert.match(await p.textContent('#app .list'), /Funzionale: Mario Rossi/);
+  assert.match(await p.textContent('.esttext'), /3 di 4 h · ne restano 1/);
+
+  // Oltre la stima: avviso nella scheda Task e nella scelta della task
+  await p.click('#tab-day');
+  await p.fill('#f-hours', '2'); await p.click('#save');
+  await p.waitForFunction(() => document.querySelectorAll('.entry').length === 2);
+  assert.match(await p.textContent('.taskopt .overtext'), /5 di 4 h/);
+  await p.click('#tab-tasks');
+  await p.waitForSelector('.est.over');
+  assert.match(await p.textContent('.esttext'), /5 di 4 h · 1 h oltre la stima/);
+
+  // Sede: un tocco per le sedi fisse, luogo e cliente per la trasferta
+  await p.click('#tab-day');
+  await p.click('label:has(#place-milano)');
+  await p.waitForFunction(() => /Ufficio Milano per mercoledì 4 novembre/.test(document.getElementById('toast').textContent));
+  assert.equal(await p.isChecked('#place-milano'), true);
+  await p.click('label:has(#place-trasferta)');
+  await p.waitForSelector('#pl-place');
+  await p.fill('#pl-place', ' '); await p.click('#pl-save');
+  assert.match(await p.textContent('#e-pl-place'), /dove/);
+  await p.fill('#pl-place', 'Bologna'); await p.fill('#pl-client', 'Inpeco'); await p.click('#pl-save');
+  await p.waitForFunction(() => /Bologna · Inpeco/.test(document.querySelector('.tripinfo')?.textContent || ''));
+  await p.screenshot({ path: `${OUT}/sede.png`, fullPage: true });
+  await p.reload();
+  await p.waitForSelector('.tripinfo');
+  assert.equal(await p.isChecked('#place-trasferta'), true);
+
+  // Copiando il giorno si copia anche la sede, se il giorno non ne ha una
+  await p.click('#strip-2026-11-05');
+  await p.click('#copy-day');
+  await p.waitForFunction(() => /Bologna · Inpeco/.test(document.querySelector('.tripinfo')?.textContent || ''));
+
+  // Mese: sigle e giorni per sede; Excel con il foglio Presenze
+  await p.click('#tab-month');
+  await p.waitForSelector('.bankfig');
+  assert.equal(await p.textContent('#cal-2026-11-04 .pl'), 'TR');
+  assert.match(await p.textContent('#cal-2026-11-04'), /trasferta a Bologna/);
+  assert.match(await p.textContent('.legend.places'), /Trasferta 2 giorni/);
+  const [dl] = await Promise.all([p.waitForEvent('download'), p.click('#export-xlsx')]);
+  const xl = execSync(`python3 -c "import zipfile,sys; z=zipfile.ZipFile(sys.argv[1]); print(z.read('xl/workbook.xml').decode()); print(z.read('xl/sharedStrings.xml').decode())" ${await dl.path()}`).toString();
+  assert.match(xl, /name="Presenze"/);
+  for (const t of ['Bologna', 'Mario Rossi', 'Ore stimate', 'Residuo']) assert.match(xl, new RegExp(t));
+
+  // Togliere la sede di un giorno
+  await p.click('#cal-2026-11-05');
+  await p.click('#clear-place');
+  await p.waitForFunction(() => /Sede tolta/.test(document.getElementById('toast').textContent));
+  assert.equal(await p.locator('.tripinfo').count(), 0);
   assert.equal(await p.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
 }
 process.kill(-s1.pid);
@@ -444,6 +509,8 @@ const s2 = await serve('dist-remote', 4302);
       return json(single ? asRow(rows[0]) : rows.map(asRow), 201);
     }
     if (u.pathname === '/rest/v1/reminder_settings') return r.method() === 'GET' ? json({ times: ['13:00'] }) : json(null, 201);
+    // Migrazione 0004 non ancora eseguita: le ore e il backup funzionano lo stesso.
+    if (u.pathname === '/rest/v1/day_places') return json({ code: 'PGRST205', message: "Could not find the table 'public.day_places' in the schema cache" }, 404);
     return json({}, 404);
   });
   await p.goto('http://localhost:4302/');
@@ -512,6 +579,7 @@ const s2 = await serve('dist-remote', 4302);
   const remote = JSON.parse(readFileSync(await dl.path(), 'utf8'));
   assert.deepEqual(remote.entries.map(e => e.hours).sort(), [2.5, 4]);
   assert.deepEqual(remote.settings.times, ['13:00']);
+  assert.deepEqual(remote.places, []);
 }
 {
   // Recupero password: richiesta del link, arrivo dal link con nuova password, link scaduto

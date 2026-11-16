@@ -1,9 +1,9 @@
 // Vista Giorno: settimana, voci del giorno e modulo per registrare le ore.
-import { ABSENCES, DOW, fmt, parse, addDays, weekDays, isAbsence, validateEntry, parseHours, normalizeCode, TITLE_MAX } from '../logic.js';
+import { ABSENCES, DOW, fmt, parse, addDays, weekDays, isAbsence, validateEntry, parseHours, normalizeCode, TITLE_MAX, PLACES, placeInfo, validatePlace, estimateProgress } from '../logic.js';
 import * as sync from '../sync.js';
 import {
   S, today, dayEntries, dayTotal, target, rest, offLabel, activeProjects, who, openTasks, taskChoice, freshDraft,
-  copySource, startDay, around, pickDay, refreshTasks, ensure, taskOf
+  copySource, startDay, around, pickDay, refreshTasks, ensure, taskOf, placeOf, knownClients
 } from '../state.js';
 import { esc, dayLabel, shortLabel, weekLabel, keepFocus, toast, loadFail, ICON, hoursText, dayState } from '../ui.js';
 import { render } from '../render.js';
@@ -57,6 +57,7 @@ export function renderDay() {
       </section>
       <section class="day">
         <div class="hero dayhead"><h2>${dayLabel(S.selected)}</h2><div class="state">${statusText}</div>${bar}</div>
+        ${placeHtml()}
         ${items.length ? `<div class="list">${items.map(entryHtml).join('')}</div>` : ''}
         ${copy ? `<div class="row"><button class="btn" data-act="copyday" id="copy-day">${ICON.copy}Copia da ${shortLabel(copy.day)} · ${fmt(copy.rows.reduce((n, e) => n + e.hours, 0))} h</button></div>` : ''}
         ${firstRun ? '<p class="hint"><b>Si parte da qui.</b> Scegli il progetto, scrivi il codice della task ServiceNow e le ore, poi salva. Dalla campanella in alto scegli quando ricevere i promemoria.</p>' : ''}
@@ -159,12 +160,76 @@ function taskFieldHtml() {
     <legend>Task</legend>
     <div class="chips tasks">
       ${open.map((t, i) => `<label class="taskopt"><input type="radio" name="task" id="task-${i}" value="${esc(t.code)}" ${draft.code === t.code ? 'checked' : ''}><span class="topt">${t.title
-        ? `<span class="tt">${esc(t.title)}</span><span class="tc">${esc(t.code)}</span>`
-        : `<span class="tt tcode">${esc(t.code)}</span>`}</span>${ICON.tick}</label>`).join('')}
+        ? `<span class="tt">${esc(t.title)}</span><span class="tc">${esc(t.code)}${estText(t)}</span>`
+        : `<span class="tt tcode">${esc(t.code)}</span>${estText(t) ? `<span class="tc">${estText(t).slice(3)}</span>` : ''}`}</span>${ICON.tick}</label>`).join('')}
       <button type="button" class="chipbtn" data-act="newtask" id="new-task">${ICON.plus}Nuova task</button>
     </div>
     ${err}
   </fieldset>`;
+}
+
+// Ore registrate rispetto alla stima, in breve, per la scelta della task.
+function estText(t) {
+  const pr = estimateProgress(t.hours, t.estimate);
+  return pr ? ` · <span class="${pr.over ? 'overtext' : ''}">${fmt(t.hours)} di ${fmt(t.estimate)} h</span>` : '';
+}
+
+// Dove si lavora nel giorno scelto: un tocco per le sedi fisse, luogo e cliente per la trasferta.
+function placeHtml() {
+  const cur = placeOf(S.selected), f = S.placeEdit;
+  const chosen = f ? 'trasferta' : cur?.kind;
+  const chips = PLACES.map(p => `<label class="${p.id === 'trasferta' ? 'trip' : ''}"><input type="radio" name="place" id="place-${p.id}" value="${p.id}" ${chosen === p.id ? 'checked' : ''}>${p.name}${ICON.tick}</label>`).join('');
+  let extra = '';
+  if (f) {
+    const e = f.errors || {};
+    extra = `<form id="place-form" class="inlineform tripform" novalidate>
+      <div class="field">
+        <label class="lbl" for="pl-place">Dove</label>
+        <input class="input" id="pl-place" value="${esc(f.place)}" maxlength="${TITLE_MAX}" autocomplete="off" placeholder="Es. Bologna" ${e.place ? 'aria-invalid="true" aria-describedby="e-pl-place"' : ''}>
+        ${e.place ? `<p class="err" id="e-pl-place">${e.place}</p>` : ''}
+      </div>
+      <div class="field">
+        <label class="lbl" for="pl-client">Per quale cliente <span>(facoltativo)</span></label>
+        <input class="input" id="pl-client" value="${esc(f.client)}" maxlength="${TITLE_MAX}" autocomplete="off" list="clients" placeholder="Es. Inpeco" ${e.client ? 'aria-invalid="true" aria-describedby="e-pl-client"' : ''}>
+        <datalist id="clients">${knownClients().map(n => `<option value="${esc(n)}"></option>`).join('')}</datalist>
+        ${e.client ? `<p class="err" id="e-pl-client">${e.client}</p>` : ''}
+      </div>
+      <div class="row">
+        <button class="btn primary" type="submit" id="pl-save">Salva trasferta</button>
+        <button class="btn" type="button" data-act="cancelplace" id="pl-cancel">Annulla</button>
+      </div>
+    </form>`;
+  } else if (cur?.kind === 'trasferta') {
+    extra = `<p class="tripinfo"><span>${esc(cur.place)}${cur.client ? ` · <b>${esc(cur.client)}</b>` : ''}</span><button type="button" class="mini" data-act="edittrip" id="edit-trip">Modifica</button></p>`;
+  }
+  return `<section class="placecard" aria-labelledby="place-h">
+    <div class="placehead"><h3 id="place-h">Dove lavori</h3>${cur && !f ? '<button type="button" class="link" data-act="clearplace" id="clear-place">Togli</button>' : ''}</div>
+    <div class="chips places" role="radiogroup" aria-labelledby="place-h">${chips}</div>
+    ${extra}
+  </section>`;
+}
+
+async function savePlace(value) {
+  const day = S.selected, before = placeOf(day);
+  try {
+    const { queued } = await sync.setPlace(day, value);
+    S.places = S.places.filter(p => p.day !== day).concat(value ? [{ day, ...value }] : []);
+    S.placeEdit = null;
+    render();
+    const what = value ? (value.kind === 'trasferta' ? `Trasferta a ${value.place}` : placeInfo(value.kind).name) : 'Sede tolta';
+    toast(`${what}${value ? ' per ' + shortLabel(day) : ''}.${later(queued)}`, async () => {
+      await sync.setPlace(day, before ? { kind: before.kind, place: before.place ?? null, client: before.client ?? null } : null);
+      S.places = S.places.filter(p => p.day !== day).concat(before ? [before] : []);
+    });
+  } catch { toast('Non sono riuscito a salvare la sede. Riprova.'); render(); }
+}
+async function submitPlace() {
+  const f = S.placeEdit;
+  if (!f) return;
+  const { errors, value } = validatePlace({ kind: 'trasferta', place: f.place, client: f.client });
+  f.errors = errors;
+  if (Object.keys(errors).length) { render(); document.getElementById(errors.place ? 'pl-place' : 'pl-client')?.focus(); return; }
+  await savePlace(value);
 }
 
 export async function go(d) {
@@ -245,6 +310,14 @@ async function copyDay() {
   try {
     const { rows, queued } = await sync.addEntries(src.rows.map(({ who: w, hours, code, description }) => ({ day: S.selected, who: w, hours, code, description })));
     S.entries = [...S.entries, ...rows];
+    // Anche la sede, se il giorno non ne ha ancora una: di solito la giornata "come ieri" è nello stesso posto.
+    const srcPlace = placeOf(src.day), copiedPlace = srcPlace && !placeOf(S.selected);
+    if (copiedPlace) {
+      const value = { kind: srcPlace.kind, place: srcPlace.place ?? null, client: srcPlace.client ?? null };
+      await sync.setPlace(S.selected, value);
+      S.places = [...S.places, { day: S.selected, ...value }];
+    }
+    const target = S.selected;
     await refreshTasks();
     S.forceOpen = false; S.errors = {}; S.draft = freshDraft();
     render();
@@ -252,6 +325,7 @@ async function copyDay() {
     const skip = src.skipped ? ` Escluse ${src.skipped} su task terminate.` : '';
     toast(`Copiate ${n} da ${shortLabel(src.day)}.${skip}${later(queued)}`, async () => {
       await sync.removeEntries(rows.map(r => r.id));
+      if (copiedPlace) { await sync.setPlace(target, null); S.places = S.places.filter(p => p.day !== target); }
       const ids = new Set(rows.map(r => r.id));
       S.entries = S.entries.filter(e => !ids.has(e.id));
       await refreshTasks();
@@ -284,6 +358,9 @@ export const actions = {
   newtask: () => { S.draft.newTask = true; S.draft.code = ''; S.draft.title = ''; S.errors = {}; render(); document.getElementById('f-code').focus(); },
   picktask: () => { S.draft.newTask = false; S.draft.code = taskChoice(S.draft.who).code; S.errors = {}; render(); },
   copyday: () => copyDay(),
+  edittrip: () => { const c = placeOf(S.selected); S.placeEdit = { place: c?.place || '', client: c?.client || '', errors: {} }; render(); document.getElementById('pl-place')?.focus(); },
+  cancelplace: () => { S.placeEdit = null; render(); },
+  clearplace: () => savePlace(null),
   adddesc: () => { S.draft.descOpen = true; render(); document.getElementById('f-desc')?.focus(); }
 };
 
@@ -292,6 +369,8 @@ export function onInput(t) {
   if (t.id === 'f-hours') S.draft.hours = t.value;
   if (t.id === 'f-desc') S.draft.desc = t.value;
   if (t.id === 'f-title') S.draft.title = t.value;
+  if (t.id === 'pl-place' && S.placeEdit) S.placeEdit.place = t.value;
+  if (t.id === 'pl-client' && S.placeEdit) S.placeEdit.client = t.value;
 }
 export function onChange(t) {
   if (t.name === 'kind') {
@@ -305,6 +384,14 @@ export function onChange(t) {
     if (S.draft.kind === 'project') { S.lastProject = t.value; Object.assign(S.draft, taskChoice(t.value)); S.errors = {}; }
     render();
   }
+  if (t.name === 'place') {
+    if (t.value === 'trasferta') {
+      const c = placeOf(S.selected);
+      S.placeEdit = { place: c?.kind === 'trasferta' ? c.place : '', client: c?.kind === 'trasferta' ? c.client || '' : '', errors: {} };
+      render();
+      document.getElementById('pl-place')?.focus();
+    } else savePlace({ kind: t.value, place: null, client: null });
+  }
   if (t.name === 'task') { S.draft.code = t.value; S.draft.newTask = false; S.errors = {}; render(); }
 }
-export const onSubmit = { 'entry-form': saveEntry };
+export const onSubmit = { 'entry-form': saveEntry, 'place-form': submitPlace };

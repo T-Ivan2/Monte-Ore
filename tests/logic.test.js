@@ -1,7 +1,8 @@
 import { readFileSync, readdirSync } from 'node:fs';
 import { describe, it, expect } from 'vitest';
 import { PGlite } from '@electric-sql/pglite';
-import { holidayName, monthDays, monday, validateEntry, romeNow, dueTimes, fmt, targetFor, validDayHours, dayLength, slugify, validateProject, colorVar, normalizeTitle, taskLabel } from '../src/logic.js';
+import { holidayName, monthDays, monday, validateEntry, romeNow, dueTimes, fmt, targetFor, validDayHours, dayLength, slugify, validateProject, colorVar, normalizeTitle, taskLabel,
+  validateTaskDetails, estimateProgress, validatePlace, placeText } from '../src/logic.js';
 import { buildSheets } from '../src/export.js';
 import { runReminders } from '../netlify/lib/reminders.mjs';
 
@@ -61,6 +62,33 @@ describe('progetti', () => {
   });
   it('chiede un progetto per le ore di progetto', () => {
     expect(validateEntry({ kind: 'project', who: null, code: 'T1', hours: '1', desc: '' }).errors.who).toBeTruthy();
+  });
+});
+
+describe('dettagli delle task e sede', () => {
+  it('controlla titolo, funzionale e ore stimate', () => {
+    expect(validateTaskDetails({ title: ' Analisi ', functional: '  Mario   Rossi ', estimate: '37,5' }))
+      .toEqual({ errors: {}, value: { title: 'Analisi', functional: 'Mario Rossi', estimate: 37.5 } });
+    expect(validateTaskDetails({ title: '', functional: ' ', estimate: '' }).value).toEqual({ title: null, functional: null, estimate: null });
+    expect(validateTaskDetails({ estimate: '0' }).errors.estimate).toMatch(/maggiore di zero/);
+    expect(validateTaskDetails({ estimate: '7,3' }).errors.estimate).toMatch(/mezz/);
+    expect(validateTaskDetails({ estimate: '10000' }).errors.estimate).toMatch(/9999/);
+    expect(validateTaskDetails({ estimate: 'tanto' }).errors.estimate).toBeTruthy();
+    expect(validateTaskDetails({ functional: 'x'.repeat(81) }).errors.functional).toMatch(/80/);
+  });
+  it('calcola l\'avanzamento rispetto alla stima', () => {
+    expect(estimateProgress(13, null)).toBeNull();
+    expect(estimateProgress(13, 40)).toEqual({ pct: 33, over: false, left: 27 });
+    expect(estimateProgress(45, 40)).toEqual({ pct: 100, over: true, left: 0 });
+  });
+  it('chiede il luogo solo in trasferta', () => {
+    expect(validatePlace({ kind: 'torino', place: 'x', client: 'y' })).toEqual({ errors: {}, value: { kind: 'torino', place: null, client: null } });
+    expect(validatePlace({ kind: 'trasferta', place: ' ', client: '' }).errors.place).toMatch(/dove/);
+    expect(validatePlace({ kind: 'trasferta', place: ' Bologna ', client: ' Inpeco ' }).value).toEqual({ kind: 'trasferta', place: 'Bologna', client: 'Inpeco' });
+    expect(validatePlace({ kind: 'trasferta', place: 'Roma', client: '' }).value.client).toBeNull();
+    expect(validatePlace({ kind: 'luna' }).errors.kind).toBeTruthy();
+    expect(placeText({ kind: 'trasferta', place: 'Roma', client: 'Inpeco' })).toBe('Trasferta · Roma · Inpeco');
+    expect(placeText({ kind: 'smart' })).toBe('Smart working');
   });
 });
 
@@ -281,6 +309,31 @@ describe('schema database', () => {
     await as(db, U1);
     expect(Object.keys((await db.query('select * from task_hours')).rows[0])).toContain('title');
   });
+  it('salva funzionale e ore stimate delle task', async () => {
+    const db = await dbReady();
+    await as(db, U1);
+    await db.exec(ok);
+    await db.exec(`update tasks set functional = 'Mario Rossi', estimate = 40`);
+    const r = (await db.query('select functional, estimate, title from task_hours')).rows[0];
+    expect([r.functional, Number(r.estimate), r.title]).toEqual(['Mario Rossi', 40, null]);
+    for (const bad of [`functional = ' x'`, `functional = ''`, `estimate = 0`, `estimate = 7.3`, `estimate = 10000`]) {
+      await expect(db.exec(`update tasks set ${bad}`)).rejects.toThrow();
+    }
+  });
+  it('salva una sede al giorno, con luogo solo in trasferta', async () => {
+    const db = await dbReady();
+    await as(db, U1);
+    const put = (day, kind, place = 'null', client = 'null') =>
+      db.exec(`insert into day_places (day, kind, place, client) values ('${day}', '${kind}', ${place}, ${client}) on conflict (user_id, day) do update set kind = excluded.kind, place = excluded.place, client = excluded.client`);
+    await expect(put('2026-11-04', 'torino')).resolves.toBeTruthy();
+    await expect(put('2026-11-04', 'trasferta', `'Bologna'`, `'Inpeco'`)).resolves.toBeTruthy();
+    expect((await db.query('select kind, place, client from day_places')).rows).toEqual([{ kind: 'trasferta', place: 'Bologna', client: 'Inpeco' }]);
+    await expect(put('2026-11-05', 'trasferta')).rejects.toThrow();
+    await expect(put('2026-11-05', 'milano', `'Bologna'`)).rejects.toThrow();
+    await expect(put('2026-11-05', 'casa')).rejects.toThrow();
+    await as(db, U2);
+    expect((await db.query('select * from day_places')).rows).toHaveLength(0);
+  });
   it('lega voci, task e progetti', async () => {
     const db = await dbReady();
     await as(db, U1);
@@ -350,6 +403,17 @@ describe('export', () => {
     expect(detail.data[1][5].value).toBe('Analisi requisiti');
     expect(detail.data[1][6].value).toBe(2);
     expect(summary.data.find(r => r[0]?.value === 'T1')[3].value).toBe('Analisi requisiti');
+  });
+  it('aggiunge stima e residuo delle task e il foglio Presenze', () => {
+    const sheets = buildSheets([{ day: '2026-11-04', who: 'inpeco', hours: 2, code: 'T1', description: '' }], 8, 8, undefined, {},
+      [{ day: '2026-11-05', kind: 'trasferta', place: 'Bologna', client: 'Inpeco' }, { day: '2026-11-04', kind: 'torino', place: null, client: null }],
+      [{ who: 'inpeco', code: 'T1', hours: 45, functional: 'Mario Rossi', estimate: 40 }]);
+    const row = sheets[1].data.find(r => r[0]?.value === 'T1');
+    expect(row.slice(4).map(c => c?.value)).toEqual(['Mario Rossi', 40, 45, -5]);
+    const presence = sheets.find(x => x.sheet === 'Presenze').data;
+    expect(presence[1].slice(2, 6).map(c => c.value)).toEqual(['Ufficio Torino', '', '', 2]);
+    expect(presence[2].slice(2, 5).map(c => c.value)).toEqual(['Trasferta', 'Bologna', 'Inpeco']);
+    expect(presence.find(r => r[0]?.value === 'Trasferta')[1].value).toBe(1);
   });
   it('usa i nomi dei progetti dell\'utente', () => {
     const [detail, summary] = buildSheets([{ day: '2026-11-04', who: 'acme', hours: 2, code: 'A1', description: '' }], 8, 8, { acme: 'Acme srl' });

@@ -60,6 +60,8 @@ select * from schema_migrations order by version;
 
 Se riesegui per errore una migrazione già applicata si ferma con un messaggio e non cambia nulla. Solo la `0001` si può rieseguire.
 
+Ultima arrivata: `0004_task_details_places.sql` (funzionale e ore stimate delle task, sede di ogni giorno). Finché non la esegui le ore funzionano come prima, ma la sezione **Dove lavori** non riesce a salvare.
+
 ### 4. Attivare le notifiche
 
 - **iPhone:** apri il sito in Safari, poi Condividi > Aggiungi alla schermata Home. Apri l'app dall'icona, accedi, tocca la campanella e **Attiva su questo dispositivo**. Serve iOS 16.4 o successivo.
@@ -69,12 +71,14 @@ Usa **Prova notifica** per controllare che l'invio funzioni, poi verifica che ar
 
 ### Backup
 
-In fondo alla pagina, **Scarica backup** crea un file JSON con tutte le ore di sempre, i progetti, le task (anche terminate) e le impostazioni. Sul telefono si apre il menu di condivisione: salvalo su File, su un cloud o mandalo per mail.
+In fondo alla pagina, **Scarica backup** crea un file JSON con tutte le ore di sempre, i progetti, le task (anche terminate, con i loro dettagli), le sedi dei giorni e le impostazioni. Sul telefono si apre il menu di condivisione: salvalo su File, su un cloud o mandalo per mail.
 
 **Ripristina backup** aggiunge ciò che manca e non modifica né elimina i dati che ci sono già. Prima di procedere mostra cosa farà e chiede conferma.
 
 - Ripristinare lo stesso file due volte non crea doppioni: ogni voce ha un identificativo.
 - Le task terminate nel backup tornano terminate.
+- Titolo, funzionale e ore stimate tornano solo sulle task create dal ripristino; quelle che hai già restano come sono.
+- Le sedi tornano solo nei giorni che non ne hanno già una.
 - Un progetto con lo stesso nome di uno già presente viene aggiunto come "Nome (backup)".
 - Le voci non valide vengono saltate e conteggiate.
 - Le impostazioni (orari e ore previste) sono nel file come riferimento, ma il ripristino non le applica.
@@ -118,11 +122,13 @@ Ogni pulsante porta un token firmato con una chiave ricavata da `VAPID_PRIVATE_K
 - La funzione dei promemoria gira ogni 5 minuti: un promemoria arriva entro qualche minuto dall'orario scelto. Se l'invio fallisce per un errore temporaneo viene ritentato al giro successivo, fino a 10 minuti dopo l'orario.
 - Il santo patrono locale non è un festivo automatico: registralo come assenza **Altro**.
 - Il codice ServiceNow è obbligatorio sui progetti, in qualsiasi formato. Una task si crea alla prima registrazione, resta selezionabile finché è aperta e, una volta terminata, resta nell'archivio con le sue ore. Registrare ore sul suo codice la riapre.
-- Ogni task può avere un **titolo** (facoltativo, al massimo 80 caratteri), che resta uguale in tutte le ore registrate su di essa; la descrizione invece è il commento della singola voce. Il titolo si scrive creando la task o, in qualsiasi momento, dalla scheda Task con **Aggiungi titolo** / **Cambia titolo**. Quando registri le ore vedi il titolo in grande e il codice sotto; nel giorno e nella scheda Task il codice in grande e il titolo sotto. Compare anche nell'Excel, nel backup e nei pulsanti delle notifiche.
-- Su un giorno vuoto, **Copia da…** ripete le voci dell'ultimo giorno compilato nella settimana precedente. Le voci su task terminate non vengono copiate.
+- Ogni task può avere un **titolo** (facoltativo, al massimo 80 caratteri), che resta uguale in tutte le ore registrate su di essa; la descrizione invece è il commento della singola voce. Il titolo si scrive creando la task o, in qualsiasi momento, dalla scheda Task con **Aggiungi dettagli** / **Modifica dettagli**. Quando registri le ore vedi il titolo in grande e il codice sotto; nel giorno e nella scheda Task il codice in grande e il titolo sotto. Compare anche nell'Excel, nel backup e nei pulsanti delle notifiche.
+- Negli stessi **dettagli** della task puoi scrivere il **funzionale** di riferimento (testo libero, al massimo 80 caratteri; mentre scrivi ti propone i nomi già usati) e le **ore stimate** (a mezz'ore, da 0,5 a 9999). Con una stima la scheda Task mostra l'avanzamento, per esempio "13 di 40 h · ne restano 27", e la barra diventa ambra quando superi la stima. Le ore fatte e la stima compaiono anche accanto alla task quando registri le ore. Nell'Excel il riepilogo delle task ha funzionale, ore stimate, ore totali e residuo (negativo se sei oltre).
+- **Dove lavori**, nella scheda Giorno, segna la sede di quel giorno: Ufficio Torino, Ufficio Milano, Smart working o Trasferta. Per la trasferta scrivi il luogo (obbligatorio) e il cliente (facoltativo, ti propone i clienti già usati e i nomi dei progetti). **Togli** cancella la scelta e un tocco su **Annulla** la ripristina. Nel calendario del mese ogni giorno mostra la sigla (TO, MI, SW, TR) e il riquadro in alto conta i giorni per sede. L'Excel ha un foglio **Presenze** con sede, luogo, cliente e ore di ogni giorno. La sede è facoltativa e non cambia il calcolo delle ore.
+- Su un giorno vuoto, **Copia da…** ripete le voci dell'ultimo giorno compilato nella settimana precedente. Le voci su task terminate non vengono copiate. Se il giorno non ha ancora una sede, copia anche quella.
 - Quando pubblichi una nuova versione, l'app aperta mostra **Nuova versione disponibile**: toccalo per ricaricare.
 - Nel weekend l'app si apre sul venerdì se è incompleto, altrimenti sul lunedì successivo.
-- **Esporta in Excel**, nella tab Mese, crea un file con il dettaglio delle voci e il riepilogo per progetto e task.
+- **Esporta in Excel**, nella tab Mese, crea un file con il dettaglio delle voci, il riepilogo per progetto e task e il foglio Presenze.
 
 ## Struttura del codice
 

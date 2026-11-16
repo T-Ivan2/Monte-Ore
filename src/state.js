@@ -3,7 +3,7 @@ import {
   ABSENCES, DEFAULT_DAY_HOURS, colorVar, findCopySource, key, addDays, monday, weekDays, fmt, isWeekend, holidayName, monthBounds, targetFor
 } from './logic.js';
 import { store, isNetworkError } from './store.js';
-import { overlay, overlayTasks } from './outbox.js';
+import { overlay, overlayTasks, overlayPlaces } from './outbox.js';
 import { pendingOps } from './sync.js';
 
 export const today = () => key(new Date());
@@ -12,6 +12,8 @@ const first = isWeekend(today()) ? monday(addDays(today(), 2)) : today();
 
 export const S = {
   entries: [],
+  places: [],   // sede di lavoro dei giorni caricati: { day, kind, place, client }
+  placeEdit: null, // trasferta in compilazione: { place, client, errors }
   tasks: [],
   projects: [],
   loaded: new Set(),
@@ -32,7 +34,7 @@ export const S = {
   panel: null, // 'hours' | 'notif' | null
   hoursError: '',
   projectForm: null, // { id: null per un nuovo progetto, name, color, errors }
-  taskEdit: null // { who, code, title, error }: titolo di una task in modifica nella scheda Task
+  taskEdit: null // { who, code, title, functional, estimate, errors }: dettagli di una task in modifica nella scheda Task
 };
 
 export const dayEntries = d => S.entries.filter(e => e.day === d);
@@ -53,6 +55,10 @@ export const names = () => Object.fromEntries([...S.projects, ...ABSENCES].map(w
 
 // Titolo di ogni task, per chiave "progetto|codice" (Excel e liste).
 export const taskTitles = () => Object.fromEntries(S.tasks.filter(t => t.title).map(t => [`${t.who}|${t.code}`, t.title]));
+export const placeOf = d => S.places.find(p => p.day === d) || null;
+// Nomi già usati, da proporre mentre si scrive.
+export const knownFunctionals = () => [...new Set(S.tasks.map(t => t.functional).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'it'));
+export const knownClients = () => [...new Set([...S.places.map(p => p.client).filter(Boolean), ...S.projects.filter(p => !p.archived_at).map(p => p.name)])].sort((a, b) => a.localeCompare(b, 'it'));
 export const taskOf = (id, code) => S.tasks.find(t => t.who === id && t.code === code);
 export const openTasks = id => S.tasks.filter(t => t.who === id && !t.done_at);
 // Con una sola task aperta la propone già selezionata. Senza task aperte chiede il codice.
@@ -92,13 +98,21 @@ export async function refreshTasks() {
   S.tasks = overlayTasks(taskBase, pendingOps());
 }
 export async function refreshProjects() { S.projects = await store.listProjects(); }
+// Le sedi non devono bloccare il caricamento delle ore: senza la tabella (migrazione non ancora fatta) restano vuote.
+async function loadPlaces(from, to) {
+  try { return await store.listPlaces(from, to); }
+  catch (err) { console.warn('sedi non disponibili', err?.message || err); return []; }
+}
 export async function ensure(days) {
   const months = [...new Set(days.map(d => d.slice(0, 7)))].filter(m => !S.loaded.has(m));
   await Promise.all(months.map(async m => {
     const { from, to } = monthBounds(m);
     // Le modifiche ancora in coda si vedono subito, anche dopo un riavvio senza rete.
-    const rows = overlay(await store.listEntries(from, to), pendingOps()).filter(e => e.day >= from && e.day <= to);
+    const [entries, places] = await Promise.all([store.listEntries(from, to), loadPlaces(from, to)]);
+    const rows = overlay(entries, pendingOps()).filter(e => e.day >= from && e.day <= to);
     S.entries = S.entries.filter(e => e.day.slice(0, 7) !== m).concat(rows);
+    const own = overlayPlaces(places, pendingOps()).filter(p => p.day >= from && p.day <= to);
+    S.places = S.places.filter(p => p.day.slice(0, 7) !== m).concat(own);
     S.loaded.add(m);
   }));
 }

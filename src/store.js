@@ -42,6 +42,7 @@ async function readThrough(k, read) {
 // Supabase salva la sessione nel browser con una chiave sb-<progetto>-auth-token.
 const hasStoredSession = () => { try { return Object.keys(localStorage).some(k => /^sb-.*-auth-token$/.test(k)); } catch { return false; } };
 
+const MISSING_TABLE = ['PGRST205', '42P01'];
 function must({ data, error }) {
   if (error) throw error;
   return data;
@@ -84,7 +85,8 @@ function supabaseStore() {
     async updateProject(id, patch) { must(await db.from('projects').update(patch).eq('id', id)); },
     async removeProject(id) { must(await db.from('projects').delete().eq('id', id)); },
     async listTasks() {
-      return readThrough('tasks', async () => must(await db.from('task_hours').select('*').order('last_day', { ascending: false, nullsFirst: false })).map(t => ({ ...t, hours: Number(t.hours) })));
+      return readThrough('tasks', async () => must(await db.from('task_hours').select('*').order('last_day', { ascending: false, nullsFirst: false }))
+        .map(t => ({ ...t, hours: Number(t.hours), estimate: t.estimate == null ? null : Number(t.estimate) })));
     },
     async setTaskDone(who, code, done) {
       must(await db.from('tasks').update({ done_at: done ? new Date().toISOString() : null }).eq('who', who).eq('code', code));
@@ -92,6 +94,23 @@ function supabaseStore() {
     async removeTask(who, code) { must(await db.from('tasks').delete().eq('who', who).eq('code', code)); },
     // Titolo della task: null lo toglie. La task nasce con la prima voce, quindi si imposta dopo.
     async setTaskTitle(who, code, title) { must(await db.from('tasks').update({ title: title || null }).eq('who', who).eq('code', code)); },
+    // Dettagli della task (titolo, funzionale, ore stimate): si aggiornano solo i campi passati.
+    async setTaskDetails(who, code, patch) { must(await db.from('tasks').update(patch).eq('who', who).eq('code', code)); },
+    // Sede di lavoro di ogni giorno. null la toglie.
+    async listPlaces(from, to) {
+      return readThrough(`places:${from}:${to}`, async () => must(await db.from('day_places').select('day, kind, place, client').gte('day', from).lte('day', to)));
+    },
+    // Senza la tabella (migrazione 0004 non ancora eseguita) il backup esce senza sedi invece di fallire.
+    async listAllPlaces() {
+      const res = await db.from('day_places').select('day, kind, place, client').order('day');
+      if (MISSING_TABLE.includes(res.error?.code)) return [];
+      return must(res);
+    },
+    async setPlace(day, value) {
+      if (!value) { must(await db.from('day_places').delete().eq('day', day)); return; }
+      const { user } = must(await db.auth.getUser());
+      must(await db.from('day_places').upsert({ user_id: user.id, day, ...value, updated_at: new Date().toISOString() }));
+    },
     async getSettings() { return readThrough('settings', () => this.readSettings()); },
     async readSettings() {
       const row = must(await db.from('reminder_settings').select('times, day_hours').maybeSingle());
@@ -125,7 +144,7 @@ function localStore() {
     let s;
     try { s = JSON.parse(localStorage.getItem(KEY)); } catch { /* riparte da vuoto */ }
     const projects = DEFAULT_PROJECTS.map((p, i) => ({ ...p, archived_at: null, created_at: new Date(Date.UTC(2026, 0, 1, 0, 0, i)).toISOString() }));
-    return { entries: [], tasks: [], projects, times: DEFAULT_TIMES, dayHours: DEFAULT_DAY_HOURS, ...s };
+    return { entries: [], tasks: [], projects, places: [], times: DEFAULT_TIMES, dayHours: DEFAULT_DAY_HOURS, ...s };
   };
   const touch = (s, e) => {
     if (!e.code) return;
@@ -186,6 +205,18 @@ function localStore() {
     async setTaskTitle(who, code, title) {
       const s = read(), t = s.tasks.find(x => x.who === who && x.code === code);
       if (t) { t.title = title || null; write(s); }
+    },
+    async setTaskDetails(who, code, patch) {
+      const s = read(), t = s.tasks.find(x => x.who === who && x.code === code);
+      if (t) { Object.assign(t, patch); write(s); }
+    },
+    async listPlaces(from, to) { return read().places.filter(p => p.day >= from && p.day <= to); },
+    async listAllPlaces() { return [...read().places].sort((a, b) => a.day.localeCompare(b.day)); },
+    async setPlace(day, value) {
+      const s = read();
+      s.places = s.places.filter(p => p.day !== day);
+      if (value) s.places.push({ day, ...value });
+      write(s);
     },
     async getSettings() { const s = read(); return { times: s.times, dayHours: s.dayHours }; },
     async setTimes(times) { const s = read(); s.times = times; write(s); },

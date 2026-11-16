@@ -304,3 +304,34 @@ textarea { height: 66px; resize: vertical; }
   .calday .t { font-size: 14px; }
   .fig b { font-size: 42px; }
 }
+
+/* Dove lavori: una riga di scelte sotto il riquadro del giorno; la trasferta apre luogo e cliente */
+.placecard { display: grid; gap: 10px; padding: 14px 16px; background: var(--surface); border-radius: var(--r-card); box-shadow: var(--shadow-card); }
+.placehead { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.placehead h3 { margin: 0; font: 700 15px var(--font-display); }
+.placehead .link { min-width: 44px; justify-content: flex-end; }
+.chips.places { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+.chips.places label { justify-content: space-between; }
+.tripform { margin-top: 0; }
+.tripinfo { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 0; font-size: 15px; overflow-wrap: anywhere; }
+.tripinfo b { font-weight: 600; }
+@media (min-width: 560px) { .chips.places { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+
+/* Sigle delle sedi nel calendario e nei conteggi del mese */
+.pl { display: inline-grid; place-items: center; min-width: 22px; padding: 1px 4px; border-radius: 6px; background: var(--soft); color: var(--ink); font: 700 10px/1.4 var(--font-body); letter-spacing: .03em; }
+.pl-trasferta { background: color-mix(in srgb, var(--accent) 22%, var(--surface)); }
+.calday .pl { position: absolute; right: 5px; bottom: 5px; }
+.legend.places { gap: 6px 14px; }
+.legend.places .pl { margin-right: 6px; background: var(--hero-track); color: var(--hero-ink); }
+
+/* Ore stimate: barra sottile e testo, ambra quando si supera la stima */
+.est { display: grid; gap: 4px; margin-top: 6px; }
+.estbar { display: block; height: 6px; border-radius: var(--r-pill); background: var(--soft); overflow: hidden; }
+.estbar i { display: block; height: 100%; background: var(--accent); }
+.est.over .estbar i { background: var(--warn); }
+.esttext { font-size: 13px; color: var(--muted); }
+.est.over .esttext { color: var(--warn); font-weight: 600; }
+.overtext { color: var(--warn); font-weight: 600; }
+.func { color: var(--ink); }
+.input.short { max-width: 160px; }
+.inlineform h3 .code { font-size: 15px; color: var(--ink); }

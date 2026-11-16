@@ -122,6 +122,52 @@ export const taskLabel = (task, max = 24) => {
   return name.length > max ? `${name.slice(0, max - 1).trimEnd()}…` : name;
 };
 
+// Dettagli di una task: titolo, funzionale di riferimento e ore stimate. Tutti facoltativi;
+// un campo vuoto diventa null, cioè "nessun valore".
+export const ESTIMATE_MAX = 9999;
+export function validateTaskDetails(draft) {
+  const errors = {};
+  const title = normalizeTitle(draft.title), functional = normalizeTitle(draft.functional);
+  if (title.length > TITLE_MAX) errors.title = `Il titolo può avere al massimo ${TITLE_MAX} caratteri.`;
+  if (functional.length > TITLE_MAX) errors.functional = `Il nome può avere al massimo ${TITLE_MAX} caratteri.`;
+  const raw = String(draft.estimate ?? '').trim();
+  let estimate = null;
+  if (raw) {
+    estimate = parseHours(raw);
+    if (!Number.isFinite(estimate) || estimate <= 0) errors.estimate = 'Inserisci un numero di ore maggiore di zero, oppure lascia vuoto.';
+    else if ((estimate * 2) % 1 !== 0) errors.estimate = "Inserisci le ore a blocchi di mezz'ora, ad esempio 37,5.";
+    else if (estimate > ESTIMATE_MAX) errors.estimate = `Al massimo ${ESTIMATE_MAX} ore.`;
+  }
+  return { errors, value: { title: title || null, functional: functional || null, estimate: errors.estimate ? null : estimate } };
+}
+// Avanzamento di una task rispetto alla stima: null se non c'è stima.
+export function estimateProgress(hours, estimate) {
+  if (!estimate) return null;
+  return { pct: Math.min(100, Math.round((hours / estimate) * 100)), over: hours > estimate, left: Math.max(0, estimate - hours) };
+}
+
+/* SEDE DI LAVORO: dove si lavora ogni giorno. */
+export const PLACES = [
+  { id: 'torino', name: 'Ufficio Torino', short: 'TO' },
+  { id: 'milano', name: 'Ufficio Milano', short: 'MI' },
+  { id: 'smart', name: 'Smart working', short: 'SW' },
+  { id: 'trasferta', name: 'Trasferta', short: 'TR' }
+];
+export const placeInfo = kind => PLACES.find(p => p.id === kind) || null;
+// Solo la trasferta ha luogo (obbligatorio) e cliente (facoltativo).
+export function validatePlace(draft) {
+  const errors = {};
+  if (!placeInfo(draft.kind)) errors.kind = 'Scegli dove lavori.';
+  if (draft.kind !== 'trasferta') return { errors, value: { kind: draft.kind, place: null, client: null } };
+  const place = normalizeTitle(draft.place), client = normalizeTitle(draft.client);
+  if (!place) errors.place = 'Scrivi dove sei in trasferta, ad esempio la città.';
+  else if (place.length > TITLE_MAX) errors.place = `Al massimo ${TITLE_MAX} caratteri.`;
+  if (client.length > TITLE_MAX) errors.client = `Al massimo ${TITLE_MAX} caratteri.`;
+  return { errors, value: { kind: 'trasferta', place: place || null, client: client || null } };
+}
+// Descrizione breve di una sede, per elenchi e Excel.
+export const placeText = p => !p ? '' : p.kind === 'trasferta' ? ['Trasferta', p.place, p.client].filter(Boolean).join(' · ') : placeInfo(p.kind)?.name ?? '';
+
 export function validateEntry(draft, otherHours = 0) {
   const errors = {};
   const isProject = draft.kind === 'project';
